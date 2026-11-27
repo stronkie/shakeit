@@ -1,4 +1,7 @@
 	include	"version.i"
+	ifnd	KEYEXIT
+KEYEXIT	equ	$59
+	endc
 ;=====================================================================
 ; whdload.s : CloverSnake.slave - the WHDLoad slave of Stronkie's Clover Snake
 ;
@@ -60,7 +63,7 @@ _base:	moveq	#-1,d0				; ws_Security
 	dc.w	_dir-_base			; ws_CurrentDir
 	dc.w	0				; ws_DontCache
 	dc.b	0				; ws_keydebug
-	dc.b	$59				; ws_keyexit = F10
+	dc.b	KEYEXIT				; ws_keyexit (F10; Help $5f on the CF card)
 	dc.l	0				; ws_ExpMem
 	dc.w	_name-_base			; ws_name
 	dc.w	_copy-_base			; ws_copy

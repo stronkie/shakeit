@@ -21,6 +21,7 @@ readme() { sed -e "s/{VER}/$VER/" -e "s/{DEMO}/$1/" ReadMe.txt; }
 (cd src && vasmm68k_mot -quiet -m68000 -Fhunkexe -kick1hunks -nosym -DDEMO=1 -o ../$B/${EXE}Demo main.s)
 (cd src && vasmm68k_mot -quiet -m68000 -Fhunkexe -kick1hunks -nosym -o ../$B/Install install.s)
 (cd src && vasmm68k_mot -quiet -m68000 -Fhunkexe -nosym -o ../$B/$EXE.slave whdload.s)
+(cd src && vasmm68k_mot -quiet -m68000 -Fhunkexe -nosym -DKEYEXIT=\$5f -o ../$B/${EXE}_card.slave whdload.s)   # CF card: Help quits
 (cd src && vasmm68k_mot -quiet -m68000 -Fhunkexe -kick1hunks -o ../$B/$EXE.sym main.s)   # with symbols, for the test harness
 
 # 2. the game disk (packed program)
