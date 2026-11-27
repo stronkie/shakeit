@@ -40,6 +40,12 @@ Developer mode: **Ctrl + Alt + D** on the title ("DEV" on screen): no lives lost
 - Walls, mushrooms and the tail kill. Losing a life restarts the round as it was;
   **R or holding fire 1.2 s** = retry (costs a life). Extra life every 10000.
 
+## Print kit
+In `print/`: `StronkiesCloverSnake_Manual.pdf` (12-page A5 booklet), `StronkiesCloverSnake_Box.pdf`
+(fold-up big box: A3 full size, A4 mini, flat faces) and `StronkiesCloverSnake_DiskLabels.pdf` (A4).
+Made by `tools/print/` (export_art.py, then make_manual.py / make_box.py / make_labels.py, using the
+toolkit's print helpers and the game's own font and tiles; screenshots in `screenshots/print/`).
+
 ## Building
 ```sh
 . /path/to/amiga-toolkit/setup.sh
@@ -53,7 +59,9 @@ VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + 
 
 ## itch.io
 Page live since 27-11-2026, status **In development**, no payments: only the free demo
-(V0.3, rounds 1-3) + a devlog. The full game is not on itch yet.
+(V0.3, rounds 1-3) + a devlog. **Full release planned for the "Stronkie Soft Update Sunday" of
+29-11-2026** (Mark, 27-11-2026): 2.00 EUR, Released, the newest version (disk image ADF, hard drive zip,
+WHDLoad) + the free demo + the print kit.
 
 ## Changelog
 ### Not yet on itch
