@@ -51,6 +51,10 @@ VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + 
 - `src/main.s` the game, `src/install.s` the hard disk installer,
   `src/whdload.s` the WHDLoad slave, `tools/icons.py` the Workbench 3.1 icons.
 
+## itch.io
+Page live since 27-11-2026, status **In development**, no payments: only the free demo
+(V0.3, rounds 1-3) + a devlog. The full game is not on itch yet.
+
 ## Changelog
 ### Not yet on itch
 - **V0.3** (27-11-2026) Fix: the M key now really turns the music off/on (the toggle
