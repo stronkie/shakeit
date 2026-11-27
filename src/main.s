@@ -141,13 +141,9 @@ Main:	move.b	#$ff,LastKey
 	move.b	#1,MusicOn
 	move.l	#5000,HiScore
 	move.w	#$ace1,Seed
-	lea	Palette,a0
-	lea	CurPal,a1
-	moveq	#15,d0
-.p:	move.w	(a0)+,(a1)+
-	dbf	d0,.p
 	bsr	Cls
 	bsr	InitCopper
+	bsr	GamePal
 	moveq	#0,d0
 	bsr	SetFade
 	bsr	InitSound
@@ -176,7 +172,7 @@ InitCopper:
 	move.l	#$01060c00,(a0)+
 	move.l	#Screen,d0
 	move.w	#$e0,d1
-	moveq	#3,d2
+	moveq	#4,d2
 .bp:	move.w	d1,(a0)+
 	swap	d0
 	move.w	d0,(a0)+
@@ -189,11 +185,12 @@ InitCopper:
 	dbf	d2,.bp
 	move.l	a0,CopColors
 	move.w	#$180,d1
-	moveq	#15,d2
+	moveq	#31,d2
 .c:	move.w	d1,(a0)+
 	clr.w	(a0)+
 	addq.w	#2,d1
 	dbf	d2,.c
+	move.l	a0,CopBpl
 	move.l	#$01004200,(a0)+
 	move.l	#$fffffffe,(a0)+
 	lea	CUSTOM,a5
@@ -206,9 +203,10 @@ InitCopper:
 ; SetFade: d0 = brightness 0..16, CurPal -> the copper list
 SetFade:
 	movem.l	d0-d4/a0-a1,-(sp)
+	move.w	d0,CurBright
 	lea	CurPal,a0
 	move.l	CopColors,a1
-	moveq	#15,d4
+	moveq	#31,d4
 .l:	move.w	(a0)+,d1
 	move.w	d1,d2
 	lsr.w	#8,d2
@@ -254,6 +252,92 @@ FadeOut:
 	movem.l	(sp)+,d0
 	rts
 
+; SetPlanes: d0 = number of bitplanes (4 for the game, 5 for the pictures)
+SetPlanes:
+	movem.l	d0/a0,-(sp)
+	move.w	d0,CurPlanes
+	ror.w	#4,d0
+	or.w	#$0200,d0
+	move.l	CopBpl,a0
+	move.w	d0,2(a0)
+	movem.l	(sp)+,d0/a0
+	rts
+
+; GamePal: the game's 16 colours, 4 bitplanes
+GamePal:
+	movem.l	d0/a0-a1,-(sp)
+	lea	Palette,a0
+	lea	CurPal,a1
+	moveq	#15,d0
+.p:	move.w	(a0)+,(a1)+
+	dbf	d0,.p
+	moveq	#15,d0
+.z:	clr.w	(a1)+
+	dbf	d0,.z
+	clr.b	TwinkleOn
+	clr.b	MaskText
+	moveq	#4,d0
+	bsr	SetPlanes
+	movem.l	(sp)+,d0/a0-a1
+	rts
+
+; ShowPic: a0 = a painted picture (planes, 32 colours, the planes);
+; text is then drawn see-through and the fireflies twinkle
+ShowPic:
+	movem.l	d0/a0-a1,-(sp)
+	move.w	(a0)+,d0
+	bsr	SetPlanes
+	lea	CurPal,a1
+	moveq	#31,d0
+.p:	move.w	(a0)+,(a1)+
+	dbf	d0,.p
+	move.l	a0,CurPic
+	lea	Screen,a1
+	move.w	#PS*5/16-1,d0
+.l:	move.l	(a0)+,(a1)+
+	move.l	(a0)+,(a1)+
+	move.l	(a0)+,(a1)+
+	move.l	(a0)+,(a1)+
+	dbf	d0,.l
+	move.b	#1,TwinkleOn
+	move.b	#1,MaskText
+	movem.l	(sp)+,d0/a0-a1
+	rts
+
+; RestoreRow: d1 = text row: the picture back under it (5 planes)
+RestoreRow:
+	movem.l	d0-d2/a0-a1,-(sp)
+	move.l	CurPic,a0
+	lea	Screen,a1
+	mulu	#320,d1
+	add.l	d1,a0
+	add.l	d1,a1
+	moveq	#4,d2
+.pl:	moveq	#79,d0
+.l:	move.l	(a0)+,(a1)+
+	dbf	d0,.l
+	lea	PS-320(a0),a0
+	lea	PS-320(a1),a1
+	dbf	d2,.pl
+	movem.l	(sp)+,d0-d2/a0-a1
+	rts
+
+; Twinkle: the fireflies (colours 29-31) take turns to light up
+Twinkle:
+	tst.b	TwinkleOn
+	beq.s	.x
+	move.l	FrameCount,d0
+	and.w	#7,d0
+	bne.s	.x
+	lea	CurPal+29*2,a0
+	move.w	4(a0),d0
+	move.w	2(a0),4(a0)
+	move.w	(a0),2(a0)
+	move.w	d0,(a0)
+	move.w	CurBright,d0
+	bsr	SetFade
+.x:	rts
+
 ;---------------------------------------------------------------------
 ; once a frame: wait for line 300, read the keyboard, the joystick,
 ; play the sound
@@ -271,6 +355,10 @@ WaitFrame:
 	addq.l	#1,FrameCount
 	bsr	PollInput
 	bsr	SoundFrame
+	bsr	AmbFrame
+	movem.l	d0-d1/a0,-(sp)
+	bsr	Twinkle
+	movem.l	(sp)+,d0-d1/a0
 	rts
 
 ; WaitFrames: d0 = frames; stops early on fire (returns d0 = -1 then)
@@ -407,12 +495,37 @@ DrawTile:
 	lsl.w	#5,d2
 	add.w	d2,a1
 	moveq	#7,d0
+	tst.b	MaskText
+	bne.s	.mask
 .l:	move.b	(a1)+,(a0)
 	move.b	(a1)+,PS(a0)
 	move.b	(a1)+,PS*2(a0)
 	move.b	(a1)+,PS*3(a0)
 	lea	40(a0),a0
 	dbf	d0,.l
+	movem.l	(sp)+,d0-d2/a0-a1
+	rts
+	; see-through: only the pixels of the tile that are not colour 0
+.mask:	movem.l	d3-d4,-(sp)
+.m:	move.b	(a1),d1
+	or.b	1(a1),d1
+	or.b	2(a1),d1
+	or.b	3(a1),d1
+	move.b	d1,d4
+	not.b	d4
+	moveq	#3,d2
+	move.l	a0,-(sp)
+.mp:	move.b	(a0),d3
+	and.b	d4,d3
+	or.b	(a1)+,d3
+	move.b	d3,(a0)
+	lea	PS(a0),a0
+	dbf	d2,.mp
+	and.b	d4,(a0)			; plane 5: colours 0-15 only
+	move.l	(sp)+,a0
+	lea	40(a0),a0
+	dbf	d0,.m
+	movem.l	(sp)+,d3-d4
 	movem.l	(sp)+,d0-d2/a0-a1
 	rts
 
@@ -642,9 +755,14 @@ PlaySfx:
 	beq.s	.got
 	moveq	#1,d0
 	tst.l	4(a0)
-	beq.s	.got
+	beq.s	.got1
+	tst.b	SfxAmb			; a forest sound gives way
+	bne.s	.got1
 	move.w	SfxNext,d0
 	eor.w	#1,SfxNext
+	tst.w	d0
+	beq.s	.got
+.got1:	clr.b	SfxAmb
 .got:	move.w	(a1)+,d1
 	addq.w	#2,d0
 	bsr	SetWave
@@ -675,12 +793,15 @@ SoundFrame:
 .sn:	addq.l	#4,a0
 	lea	16(a2),a2
 	dbf	d3,.s
-	; music
+	; music: tokens $ffff = back to the start, $fffe = wave,
+	; $fffd = envelope (volume, decay shift, lowest volume, vibrato)
 	lea	CUSTOM+$a0,a2
 	tst.b	MusicOn
 	beq	.mute
 	tst.l	MusPtr
 	beq	.mute
+	movem.l	a3,-(sp)
+	lea	VibTab(pc),a3
 	lea	MusPtr,a0
 	lea	MusState,a1
 	moveq	#0,d3			; channel 0 and 1
@@ -688,9 +809,22 @@ SoundFrame:
 	bgt.s	.env
 	move.l	(a0),a2
 .rd:	move.w	(a2)+,d0
-	cmp.w	#$ffff,d0
-	bne.s	.nl
-	move.l	8(a0),a2		; loop
+	cmp.w	#$fffd,d0
+	bcs.s	.nl
+	beq.s	.envset
+	cmp.w	#$fffe,d0
+	beq.s	.wav
+	move.l	8(a0),a2		; the end: loop
+	bra.s	.rd
+.wav:	move.w	(a2)+,d1
+	move.w	d3,d0
+	bsr	SetWave
+	bra.s	.rd
+.envset:
+	move.w	(a2)+,6(a1)
+	move.w	(a2)+,8(a1)
+	move.w	(a2)+,10(a1)
+	move.w	(a2)+,12(a1)
 	bra.s	.rd
 .nl:	move.w	(a2)+,(a1)
 	move.l	a2,(a0)
@@ -702,32 +836,110 @@ SoundFrame:
 	add.w	d0,a2
 	move.w	4(a1),d0
 	beq.s	.rest
-	move.w	d0,6(a2)
-	moveq	#22,d1			; melody volume (music kept down)
-	tst.w	d3
-	beq.s	.v
-	moveq	#30,d1			; bass
-.v:	move.w	2(a1),d2
+	tst.w	12(a1)			; vibrato after a while
+	beq.s	.nov
+	move.w	2(a1),d1
+	cmp.w	#12,d1
+	blt.s	.nov
+	lsr.w	#1,d1
+	and.w	#7,d1
+	move.b	(a3,d1.w),d1
+	ext.w	d1
+	move.w	d0,d2
+	lsr.w	#7,d2
+	muls	d2,d1
+	add.w	d1,d0
+.nov:	move.w	d0,6(a2)
+	move.w	6(a1),d1		; volume: falls with the age of the note
+	move.w	2(a1),d2
+	move.w	8(a1),d0
+	lsr.w	d0,d2
+	sub.w	d2,d1
+	cmp.w	10(a1),d1
+	bge.s	.v2
+	move.w	10(a1),d1
+.v2:	cmp.w	#2,2(a1)		; a soft start
+	bge.s	.v3
+	move.w	d1,d2
 	lsr.w	#2,d2
 	sub.w	d2,d1
-	cmp.w	#7,d1
-	bge.s	.v2
-	moveq	#7,d1
-.v2:	cmp.w	#2,(a1)
-	bgt.s	.v3
+.v3:	cmp.w	#1,(a1)			; a tiny gap before the next note
+	bgt.s	.v4
 .rest:	moveq	#0,d1
-.v3:	move.w	d1,8(a2)
+.v4:	move.w	d1,8(a2)
 	addq.w	#1,2(a1)
 	addq.l	#4,a0
-	addq.l	#6,a1
+	lea	16(a1),a1
 	addq.w	#1,d3
 	cmp.w	#2,d3
 	blt	.m
+	movem.l	(sp)+,a3
 	bra.s	.x
 .mute:	clr.w	8(a2)
 	clr.w	$18(a2)
 .x:	movem.l	(sp)+,d0-d3/a0-a2
 	rts
+
+VibTab:	dc.b	0,1,2,1,0,-1,-2,-1
+	even
+
+; AmbFrame: now and then a sound of the forest on channel 3 (birds,
+; the wind, a woodpecker, a cuckoo, an owl) - with the music (M)
+AmbFrame:
+	tst.b	MusicOn
+	bne.s	.on
+	tst.b	SfxAmb			; music off: the forest stops too
+	beq.s	.x
+	clr.b	SfxAmb
+	clr.l	SfxPtr+4
+	clr.w	CUSTOM+$d8
+	rts
+.on:	tst.b	AmbOn
+	beq.s	.x
+	subq.w	#1,AmbTimer
+	bgt.s	.x
+	movem.l	d0-d1/a0-a1,-(sp)
+	tst.l	SfxPtr+4
+	bne.s	.later
+	moveq	#AMBN,d0
+	bsr	AmbRand
+	lea	AmbList(pc),a0
+	moveq	#0,d1
+	move.b	(a0,d0.w),d1
+	lea	SfxTab,a0
+	add.w	d1,d1
+	add.w	d1,d1
+	move.l	(a0,d1.w),a1
+	move.w	(a1)+,d1
+	moveq	#3,d0
+	bsr	SetWave
+	move.l	a1,SfxPtr+4
+	move.b	#1,SfxAmb
+.later:	move.w	#260,d0
+	bsr	AmbRand
+	add.w	#70,d0
+	move.w	d0,AmbTimer
+	movem.l	(sp)+,d0-d1/a0-a1
+.x:	rts
+
+; AmbRand: d0 = n -> 0..n-1 (its own numbers: the game's stay the same)
+AmbRand:
+	movem.l	d1-d2,-(sp)
+	move.w	d0,d2
+	move.w	AmbSeed,d0
+	mulu	#25173,d0
+	add.w	#13849,d0
+	move.w	d0,AmbSeed
+	mulu	d2,d0
+	clr.w	d0
+	swap	d0
+	movem.l	(sp)+,d1-d2
+	rts
+
+AmbList:	dc.b	SFX_BIRD1,SFX_BIRD2,SFX_BIRD3,SFX_BIRD4,SFX_BIRD1,SFX_BIRD3
+		dc.b	SFX_BIRD2,SFX_BIRD4,SFX_WIND,SFX_WIND,SFX_WOODPECKER,SFX_CUCKOO,SFX_OWL
+AMBN		equ	13
+	even
 
 ; StartTune: a0 = melody, a1 = bass
 StartTune:
@@ -737,15 +949,21 @@ StartTune:
 	move.l	a0,MusStart
 	move.l	a1,MusStart+4
 	lea	MusState,a0
-	move.w	#1,(a0)
-	move.w	#1,6(a0)
-	clr.w	4(a0)
-	clr.w	10(a0)
+	moveq	#1,d1
+.ch:	move.w	#1,(a0)+		; frames left
+	clr.w	(a0)+			; age
+	clr.w	(a0)+			; period
+	move.w	#24,(a0)+		; volume
+	move.w	#3,(a0)+		; decay
+	move.w	#6,(a0)+		; lowest volume
+	clr.w	(a0)+			; vibrato
+	clr.w	(a0)+
+	dbf	d1,.ch
 	moveq	#0,d0
-	moveq	#1,d1			; melody: PU16
+	moveq	#1,d1
 	bsr	SetWave
 	moveq	#1,d0
-	moveq	#2,d1			; bass: TRI32
+	moveq	#2,d1
 	bsr	SetWave
 	movem.l	(sp)+,d0-d1
 	rts
@@ -758,27 +976,30 @@ StopTune:
 	rts
 
 ;---------------------------------------------------------------------
-Intro:	bsr	Cls
-	lea	IntroPic,a0
-	bsr	CopyPic
-	lea	TxPresents(pc),a0
-	moveq	#22,d1
-	move.w	#T_FONTW,d2
-	bsr	CenterText
+; the loading picture: the forest, with the title music and the birds
+Intro:	lea	IntroPic,a0
+	bsr	ShowPic
+	lea	TuneTitleMel,a0
+	lea	TuneTitleBas,a1
+	bsr	StartTune
+	move.b	#1,AmbOn
+	move.w	#40,AmbTimer
 	bsr	FadeIn
-	move.w	#110,d0
+	move.w	#350,d0
 	bsr	WaitFrames
 	bsr	FadeOut
 	rts
 
 ;---------------------------------------------------------------------
 ; the title: returns d0 = 0 to play, -1 to quit
-Title:	lea	TuneTitleMel,a0
+Title:	move.b	#1,AmbOn
+	lea	TuneTitleMel,a0
+	cmp.l	MusStart,a0		; already playing (after the loading picture)?
+	beq.s	.page1
 	lea	TuneTitleBas,a1
 	bsr	StartTune
-.page1:	bsr	Cls
-	lea	TitlePic,a0
-	bsr	CopyPic
+.page1:	lea	TitlePic,a0
+	bsr	ShowPic
 	bsr	TitleTexts
 	bsr	FadeIn
 	move.w	#600,TitleTimer
@@ -809,6 +1030,8 @@ Title:	lea	TuneTitleMel,a0
 	bsr	PlaySfx
 	tst.b	TitlePage
 	bne.s	.nodev
+	moveq	#30,d1
+	bsr	RestoreRow
 	bsr	TitleTexts
 .nodev:	tst.b	FireHit
 	bne.s	.start
@@ -825,6 +1048,8 @@ Title:	lea	TuneTitleMel,a0
 	bsr	PlaySfx
 	bsr	FadeOut
 	bsr	StopTune
+	clr.b	AmbOn
+	bsr	GamePal
 	moveq	#0,d0
 	rts
 .quit:	bsr	FadeOut
@@ -863,27 +1088,24 @@ TitleTexts:
 	moveq	#29,d1
 	move.w	#T_FONTC,d2
 	bsr	CenterText
-	moveq	#31,d1
-	lea	TxBlank(pc),a0
-	move.w	#T_FONTW,d2
-	moveq	#0,d0
-	bsr	DrawText
+	moveq	#30,d1
 	if	DEMO
 	lea	TxDemoTitle(pc),a0
-	moveq	#1,d0
+	moveq	#2,d0
 	move.w	#T_FONTG,d2
 	bsr	DrawText
 	endc
 	tst.b	DevMode
 	beq.s	.nd
 	lea	TxDevMode(pc),a0
-	moveq	#31,d0
+	moveq	#30,d0
 	move.w	#T_FONTC,d2
 	bsr	DrawText
 .nd:	rts
 
 HowToPage:
-	bsr	Cls
+	lea	HowToPic,a0
+	bsr	ShowPic
 	lea	HowTo(pc),a2
 .l:	move.b	(a2)+,d1		; row (0 = the end)
 	beq.s	.x
@@ -924,7 +1146,6 @@ TxVersion:	dc.b	'@ 2026  -  VERSION '
 		dc.b	0
 TxControls:	dc.b	'JOYSTICK IN PORT 2 OR CURSOR KEYS',0
 TxKeys:		dc.b	'R RETRY  P PAUSE  M MUSIC  ESC QUIT',0
-TxBlank:	dc.b	'                                        ',0
 TxDevMode:	dc.b	'DEV MODE',0
 		if	DEMO
 TxDemoTitle:	dc.b	'DEMO: 3 ROUNDS',0
@@ -957,7 +1178,9 @@ HowTo:	dc.b	1,14,1,0,'HOW TO PLAY',0
 
 ;---------------------------------------------------------------------
 ; the game
-Game:	clr.l	Score
+Game:	bsr	GamePal
+	move.b	#1,AmbOn
+	clr.l	Score
 	move.w	#3,Lives
 	move.l	#10000,NextLife
 	move.w	#1,Round
@@ -2142,7 +2365,13 @@ OldIntena:	ds.w	1
 OldDma:		ds.w	1
 CopColors:	ds.l	1
 FrameCount:	ds.l	1
-CurPal:		ds.w	16
+CurPal:		ds.w	32
+CurBright:	ds.w	1
+CurPlanes:	ds.w	1
+CopBpl:		ds.l	1
+CurPic:		ds.l	1
+TwinkleOn:	ds.b	1
+MaskText:	ds.b	1
 KeyTab:		ds.b	128
 LastKey:	ds.b	1
 JoyDir:		ds.b	1
@@ -2162,9 +2391,13 @@ TitleTimer:	ds.w	1
 Seed:		ds.w	1
 SfxPtr:		ds.l	2
 SfxNext:	ds.w	1
+AmbTimer:	ds.w	1
+AmbSeed:	ds.w	1
+AmbOn:		ds.b	1
+SfxAmb:		ds.b	1
 MusPtr:		ds.l	2
 MusStart:	ds.l	2
-MusState:	ds.w	6		; per channel: frames left, age, period
+MusState:	ds.w	16		; per channel: frames left, age, period, volume, decay, lowest, vibrato, -
 NumBuf:		ds.b	14
 MsgBuf:		ds.b	40
 	even
@@ -2204,5 +2437,5 @@ BfsQ:		ds.w	40*32
 CandList:	ds.w	40*32
 
 	section	chipvars,bss_c
-Screen:		ds.b	SCRSIZE
-CopperList:	ds.l	64
+Screen:		ds.b	PS*5
+CopperList:	ds.l	80

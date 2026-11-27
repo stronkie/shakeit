@@ -14,10 +14,10 @@ mushrooms start to sprout.
 ## Files
 | File | What |
 |---|---|
-| `StronkiesCloverSnake_V0.3.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
+| `StronkiesCloverSnake_V0.4.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
 | `StronkiesCloverSnake_Demo.adf` | free demo: rounds 1-3 |
-| `StronkiesCloverSnake_V0.3_harddrive.zip` | drawer for a hard drive / CF card |
-| `StronkiesCloverSnake_V0.3_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
+| `StronkiesCloverSnake_V0.4_harddrive.zip` | drawer for a hard drive / CF card |
+| `StronkiesCloverSnake_V0.4_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
 
 ## Controls
 Joystick port 2 or cursor keys - Fire/Space/Return start - P pause - M music on/off -
@@ -51,7 +51,8 @@ toolkit's print helpers and the game's own font and tiles; screenshots in `scree
 . /path/to/amiga-toolkit/setup.sh
 VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + zips + WHDLoad
 ```
-- `tools/gen.py` makes `src/gfx_gen.s`: palette, tiles, font, intro/title pictures,
+- `tools/paint.py` paints the loading, title and how-to-play pictures (4x size, reduced to
+  Amiga colours); `tools/gen.py` makes `src/gfx_gen.s`: palette, tiles, font, the pictures,
   the 12 rounds (checked: every cell reachable), waveforms, sound effects, music.
   Previews go to `art/`.
 - `src/main.s` the game, `src/install.s` the hard disk installer,
@@ -65,6 +66,14 @@ WHDLoad) + the free demo + the print kit.
 
 ## Changelog
 ### Not yet on itch
+- **V0.4** (27-11-2026) New look and sound (Mark: the menu was mostly text, no real loading
+  screen, the music irritating): painted loading picture (forest, the snake, fly agarics, clover,
+  ball, heart), painted title + how-to-play page (32 colours, 5 bitplanes, colours 0-15 = the
+  game's, fireflies twinkle on colours 29-31), the menu inside a fence of the game's walls,
+  text drawn see-through. Music: Grieg's Morning Mood (title, flute/oboe + harp) and Bach's
+  Minuet in G (game, AABB, soft); new engine with instruments, envelopes and vibrato. Forest
+  sounds on channel 3 (birds, wind, woodpecker, cuckoo, owl), they give way to game effects;
+  M turns music + forest off.
 - **V0.3** (27-11-2026) Fix: the M key now really turns the music off/on (the toggle
   flipped 1 to $FE, which still meant "on").
 - **V0.2** (27-11-2026) Plays like the MSX original: step-by-step movement, pushable

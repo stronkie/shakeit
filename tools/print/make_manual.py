@@ -128,7 +128,7 @@ rows = [('JOYSTICK UP/DOWN/LEFT/RIGHT', 'The snake takes one step that way. Hold
         ('FIRE  /  SPACE  /  RETURN', 'Start the game. Skip the "ROUND" and "GET READY" messages.'),
         ('R  or  HOLD FIRE', 'Retry the round - for when you have boxed yourself in. It costs a life.'),
         ('P', 'Pause. Press P again (or fire) to go on.'),
-        ('M', 'Music on / off (also on the title screen).'),
+        ('M', 'Music and forest sounds on / off (also on the title screen).'),
         ('ESC', 'Back to the title screen. On the title screen: back to Workbench.')]
 for k, txt in rows:
     c.setFillColor(MEADOW); c.roundRect(M, y - 15, W - 2 * M, 15, 3, stroke=0, fill=1)
@@ -245,7 +245,8 @@ for t in tips:
     icon(c, 'clover', M, y - 12, 11)
     y = para(c, t, M + 17, y, W - 2 * M - 17, 8.4) - 8
 y = factbox(c, M, y - 6, W - 2 * M, 'DID YOU KNOW?',
-            'The whole game - graphics, rounds, music and sound effects - fits in about <b>17 KB</b> on the disk. '
+            'The music is classical: Grieg\'s <b>Morning Mood</b> on the title screen and Bach\'s <b>Minuet in G</b> in the game, '
+            'with birds, wind, a woodpecker, a cuckoo and an owl from the forest. '
             'Your snake can grow to more than 900 pieces... but we have never seen one get that far.', MAGENTA, 7.6)
 c.showPage()
 

@@ -392,29 +392,99 @@ def put_tile(pic, name, x0, y0, scale=1):
             if big[y, x]:
                 pic[y0 + y, x0 + x] = big[y, x]
 
+# the painted pictures (tools/paint.py): colours 0-15 are the game's,
+# 16-28 the picture's own, 29-31 the fireflies (they twinkle in the game)
+import paint
+FIRE_PAL = [(15, 15, 9), (10, 12, 5), (6, 9, 4)]
+_meadow = None
+def meadow_rgb():
+    global _meadow
+    if _meadow is None:
+        _meadow = paint.meadow()
+    return _meadow
+
+def text_mask(text, scale):
+    n = len(text)
+    m = np.zeros((8 * scale, n * 8 * scale), bool)
+    for i, ch in enumerate(text):
+        m[:, i * 8 * scale:(i + 1) * 8 * scale] |= np.kron(glyph(ch), np.ones((scale, scale), bool))
+    return m
+
+def halo(rgb, items, amount=0.6, blur=3.0):
+    """darken the picture softly around big text so it stands out"""
+    from scipy.ndimage import gaussian_filter, binary_dilation
+    m = np.zeros((H, W), np.float32)
+    for text, x0, y0, scale in items:
+        tm = text_mask(text, scale)
+        tm = binary_dilation(tm, iterations=scale)
+        hh, ww = tm.shape
+        m[y0:y0 + hh, x0:x0 + ww] = np.maximum(m[y0:y0 + hh, x0:x0 + ww], tm)
+    m = np.clip(gaussian_filter(m, blur) * 2.2, 0, 1)
+    return rgb * (1 - amount * m)[..., None]
+
+def finish(rgb, fire, seed=1, dither=10.0):
+    idx, pal = paint.quantize(rgb, {i: PAL[i] for i in range(16)}, 13, 16, seed=seed, dither=dither)
+    for i, c in enumerate(FIRE_PAL):
+        pal[29 + i] = c
+    for x, y, c in fire:
+        idx[y, x] = c
+    return idx, pal
+
+def fence(pic, c0, r0, c1, r1):
+    """a frame of the game's walls (8x8 tiles) from cell c0,r0 to c1,r1"""
+    for r in range(r0, r1 + 1):
+        for c in range(c0, c1 + 1):
+            if r not in (r0, r1) and c not in (c0, c1):
+                continue
+            m = 0
+            if r > r0 and c in (c0, c1): m |= 1
+            if r < r1 and c in (c0, c1): m |= 4
+            if c < c1 and r in (r0, r1): m |= 2
+            if c > c0 and r in (r0, r1): m |= 8
+            pic[r * 8:r * 8 + 8, c * 8:c * 8 + 8] = 0
+            put_tile(pic, 'WALL%d' % m, c * 8, r * 8)
+
 def make_intro():
-    p = new_pic()
-    paste_logo(p, (W - 158 * 2) // 2, 72, 2)
-    return p
+    rgb, fire = paint.loading()
+    items = [("STRONKIE'S", (W - 10 * 16) // 2, 206, 2), ("CLOVER SNAKE", (W - 12 * 24) // 2, 226, 3), ('PRESENTS', (W - 8 * 8) // 2, 50, 1)]
+    rgb = halo(rgb, items, 0.55)
+    p, pal = finish(rgb, fire, seed=3)
+    paste_logo(p, (W - 158) // 2, 4, 1)
+    big_text(p, 'PRESENTS', (W - 8 * 8) // 2, 50, 1, CH['W'], CH['g'], 0, 3)
+    big_text(p, "STRONKIE'S", (W - 10 * 16) // 2, 206, 2, CH['L'], CH['Y'], 0, 5)
+    big_text(p, "CLOVER", (W - 12 * 24) // 2, 226, 3, CH['G'], CH['h'], 0, 3)
+    big_text(p, "SNAKE", (W - 12 * 24) // 2 + 7 * 24, 226, 3, CH['C'], CH['b'], 0, 3)
+    return p, pal
 
 def make_title():
-    p = new_pic()
-    paste_logo(p, (W - 158) // 2, 4, 1)
-    big_text(p, "STRONKIE'S", (W - 10 * 16) // 2, 54, 2, CH['L'], CH['Y'], 0, 5)
-    big_text(p, "CLOVER", (W - 6 * 32) // 2, 76, 4, CH['G'], CH['h'], 0, 3)
-    big_text(p, "SNAKE", (W - 5 * 32) // 2, 112, 4, CH['C'], CH['b'], 0, 3)
-    # a little snake chasing clovers along the bottom of the picture (2x tiles)
-    y = 146
-    xs = 40
+    rgb, fire = meadow_rgb()
+    rgb = rgb.copy()
+    items = [("STRONKIE'S", (W - 10 * 16) // 2, 50, 2), ("CLOVER", (W - 6 * 32) // 2, 68, 4), ("SNAKE", (W - 5 * 32) // 2, 102, 4)]
+    rgb = halo(rgb, items, 0.6)
+    # the menu: the meadow made dark inside a fence of the game's walls
+    rgb[160:, :] *= 0.27
+    p, pal = finish(rgb, [f for f in fire if f[1] < 150], seed=5)
+    paste_logo(p, (W - 158) // 2, 2, 1)
+    big_text(p, "STRONKIE'S", (W - 10 * 16) // 2, 50, 2, CH['L'], CH['Y'], 0, 5)
+    big_text(p, "CLOVER", (W - 6 * 32) // 2, 68, 4, CH['G'], CH['h'], 0, 3)
+    big_text(p, "SNAKE", (W - 5 * 32) // 2, 102, 4, CH['C'], CH['b'], 0, 3)
+    # the game itself: a snake on its way to the clovers, a ball and a heart
+    y, xs = 138, 44
     put_tile(p, 'SNAKE2', xs, y, 2)
     for i in range(1, 6):
         put_tile(p, 'SNAKE10', xs + i * 16, y, 2)
     put_tile(p, 'HEAD1', xs + 6 * 16, y, 2)
-    put_tile(p, 'CLOVER', xs + 8 * 16, y, 2)
-    put_tile(p, 'BALL', xs + 10 * 16, y, 2)
-    put_tile(p, 'CLOVER', xs + 12 * 16, y, 2)
-    put_tile(p, 'HEART', xs + 14 * 16, y, 2)
-    return p
+    for i, t in ((8, 'CLOVER'), (10, 'BALL'), (12, 'CLOVER'), (14, 'HEART')):
+        put_tile(p, t, xs + i * 16, y, 2)
+    fence(p, 0, 20, 39, 31)
+    return p, pal
+
+def make_howto():
+    rgb, fire = meadow_rgb()
+    rgb = rgb * 0.22
+    p, pal = finish(rgb, [], seed=7, dither=6.0)
+    fence(p, 0, 0, 39, 31)
+    return p, pal
 
 def planar(pic, nplanes=4):
     out = bytearray()
@@ -423,13 +493,10 @@ def planar(pic, nplanes=4):
         out += np.packbits(bits, axis=1).tobytes()
     return bytes(out)
 
-def save_preview(pic, name):
-    im = Image.new('RGB', (W, H))
-    px = im.load()
-    for y in range(H):
-        for x in range(W):
-            px[x, y] = rgb(pic[y, x])
-    im.resize((W * 2, H * 2), Image.NEAREST).save(os.path.join(PREV, name))
+def save_preview(pic, name, pal=None):
+    pal = pal or PAL
+    P = np.array([[c * 17 for c in pal[i]] if i < len(pal) else [0, 0, 0] for i in range(32)], np.uint8)
+    Image.fromarray(P[pic]).resize((W * 2, H * 2), Image.NEAREST).save(os.path.join(PREV, name))
 
 # ------------------------------------------------------------------ rounds
 FW, FH = 34, 27           # the field inside the border
@@ -714,7 +781,17 @@ WAVES['TRI32'] = bytes((int(round(((i if i < 16 else 32 - i) / 16 * 2 - 1) * 110
 WAVES['SQ32'] = sq(32, 0.5, 90)
 rng = random.Random(77)
 WAVES['NOISE'] = bytes(rng.randrange(256) for _ in range(1024))
-WAVE_ORDER = ['SQ16', 'PU16', 'TRI32', 'SQ32', 'NOISE']
+def harmonics(n, amps, amp=110):
+    v = [sum(a * np.sin(2 * np.pi * (k + 1) * i / n) for k, a in enumerate(amps)) for i in range(n)]
+    m = max(abs(x) for x in v)
+    return bytes(int(round(x / m * amp)) & 255 for x in v)
+WAVES['SINE8'] = harmonics(8, [1])
+WAVES['SINE16'] = harmonics(16, [1])
+WAVES['SINE32'] = harmonics(32, [1])
+WAVES['FLUTE16'] = harmonics(16, [1, 0.22, 0.06])          # soft, round
+WAVES['OBOE16'] = harmonics(16, [0.7, 1, 0.55, 0.3, 0.12])  # reedy
+WAVES['HARP32'] = harmonics(32, [1, 0.45, 0.22, 0.1, 0.05]) # plucked strings
+WAVE_ORDER = ['SQ16', 'PU16', 'TRI32', 'SQ32', 'NOISE', 'SINE8', 'SINE16', 'SINE32', 'FLUTE16', 'OBOE16', 'HARP32']
 WLEN = {k: len(v) for k, v in WAVES.items()}
 
 SFX = {}
@@ -746,42 +823,90 @@ sfx('CLEAR', 'SQ16', jingle(['G5', 'C6', 'E6', 'G6', '-', 'E6', 'G6', 'G6', 'C6'
 sfx('GAMEOVER', 'TRI32', jingle(['G4', 'F#4', 'F4', 'E4', '-', 'C4', 'C4', 'C4'], 'TRI32', 56, 10))
 sfx('START', 'SQ16', jingle(['C5', 'G5', 'C6'], step=4))
 
-# music: two channels (0 = melody on PU16, 1 = bass on TRI32), notes in eighths
+# the forest (played now and then on channel 3, quietly)
+def pf(f, wave):
+    return max(124, int(round(CLOCK / (f * WLEN[wave]))))
+def chirp(f0, f1, n, vol, wave='SINE8'):
+    return [(pf(f0 + (f1 - f0) * i / max(n - 1, 1), wave), int(vol * (1 - 0.35 * i / n))) for i in range(n)]
+GAP = lambda n: [(0x7fff, 0)] * n
+sfx('BIRD1', 'SINE8', chirp(3400, 2500, 4, 20) + GAP(4) + chirp(3400, 2500, 4, 22) + GAP(4) + chirp(3500, 2300, 6, 20))
+sfx('BIRD2', 'SINE8', [(pf(2700 if i % 2 else 3200, 'SINE8'), 16 - i // 3) for i in range(18)] + GAP(6) + chirp(3000, 3400, 5, 14))
+sfx('BIRD3', 'SINE8', [(pf(3000, 'SINE8'), 18)] * 6 + chirp(3000, 2000, 9, 18) + GAP(10) + [(pf(3000, 'SINE8'), 14)] * 5 + chirp(3000, 2100, 8, 14))
+sfx('BIRD4', 'SINE8', chirp(2200, 3450, 10, 16) + GAP(3) + chirp(2600, 3450, 6, 14) + GAP(3) + chirp(2600, 3450, 6, 12))
+sfx('CUCKOO', 'SINE16', ([(pf(740, 'SINE16'), v) for v in (14, 26, 26, 24, 22, 18, 10)] + GAP(3) +
+                         [(pf(622, 'SINE16'), v) for v in (14, 26, 26, 25, 24, 22, 20, 17, 13, 8)] + GAP(14)) * 2)
+sfx('WOODPECKER', 'NOISE', sum(([(380, 34 - k * 2), (0x7fff, 0), (0x7fff, 0)] for k in range(12)), []))
+sfx('WIND', 'NOISE', [(int(820 - 120 * np.sin(i / 25)), int(11 * np.sin(np.pi * i / 150) ** 2)) for i in range(150)])
+sfx('OWL', 'SINE32', [(pf(370, 'SINE32'), int(22 * min(1, i / 4, (16 - i) / 5))) for i in range(16)] + GAP(14) +
+                     [(pf(340, 'SINE32'), int(20 * min(1, i / 3, (9 - i) / 3))) for i in range(9)] + GAP(3) +
+                     [(pf(340, 'SINE32'), int(20 * min(1, i / 3, (16 - i) / 5))) for i in range(16)])
+
+# music: two channels (0 = melody, 1 = accompaniment), lengths in eighths.
+# tokens: NOTE[:len], -[:len] rest, w:WAVE (instrument), e:vol,decay,lowest,vibrato
+def transpose(seq, k):
+    out = []
+    names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    for tok in seq.split():
+        n, sep, l = tok.partition(':')
+        if n in ('-', 'w', 'e') or n[0] not in 'ABCDEFG':
+            out.append(tok)
+            continue
+        v = NOTES[n[:-1]] + 12 * int(n[-1]) + k
+        out.append(names[v % 12] + str(v // 12) + (sep + l if sep else ''))
+    return ' '.join(out)
+
 def tune(melody, bass, step):
-    def ch(seq, wave):
-        out = []
+    def ch(seq):
+        out, wave = [], 'FLUTE16'
         for tok in seq.split():
             n, _, l = tok.partition(':')
+            if n == 'w':
+                wave = l
+                out.append(('W', WAVE_ORDER.index(l)))
+                continue
+            if n == 'e':
+                out.append(('E', [int(v) for v in l.split(',')]))
+                continue
             ln = int(l or 1) * step
             out.append((0 if n == '-' else period(n, WLEN[wave]), ln))
         return out
-    return ch(melody, 'PU16'), ch(bass, 'TRI32')
+    return ch(melody), ch(bass)
 
-TITLE_MEL = ("E5 G5 C6 G5 A5:2 G5 E5 "
-             "F5 E5 D5 E5 C5:2 - G4 "
-             "E5 G5 C6 G5 A5:2 C6 A5 "
-             "G5 F5 E5 D5 C5:3 - "
-             "A5 A5 G5 F5 E5:2 C5 E5 "
-             "D5 D5 E5 F5 G5:3 - "
-             "A5 B5 C6 A5 G5:2 E5 C5 "
-             "D5 G4 B4 D5 C5:3 -")
-TITLE_BAS = ("C3:2 G2:2 C3:2 G2:2 F2:2 C3:2 C3:2 G2:2 "
-             "C3:2 G2:2 F2:2 A2:2 G2:2 G2:2 C3:2 G2:2 "
-             "F2:2 C3:2 F2:2 C3:2 G2:2 D3:2 G2:2 B2:2 "
-             "F2:2 C3:2 A2:2 C3:2 G2:2 G2:2 C3:2 C3:2")
-GAME_MEL = ("A4 - C5 - E5 D5 C5 - "
-            "G4 - B4 - D5 C5 B4 - "
-            "F4 - A4 - C5 B4 A4 - "
-            "E4 G#4 B4 E5 D5 C5 B4 - "
-            "A4 - C5 - E5 G5 E5 - "
-            "D5 - F5 - A5 G5 F5 - "
-            "E5 - C5 - B4 A4 G#4 - "
-            "A4:3 - E4:2 - -")
-GAME_BAS = ("A2 - A2 E3 A2 - E3 - G2 - G2 D3 G2 - D3 - "
-            "F2 - F2 C3 F2 - C3 - E2 - E2 B2 E2 - G#2 - "
-            "A2 - A2 E3 A2 - E3 - D2 - D2 A2 D2 - A2 - "
-            "E2 - E2 B2 E2 - E2 - A2 - A2 E3 A2 - - -")
-TUNES = {'TITLE': tune(TITLE_MEL, TITLE_BAS, 12), 'GAME': tune(GAME_MEL, GAME_BAS, 10)}
+# the title: Grieg, Morning Mood (Peer Gynt), 6/8 in E major;
+# first the flute, then the oboe answers an octave up; harp underneath
+MM_A = ("G4:2 E4 D4:2 C4 D4:2 E4 G4:2 E4 D4:2 C4 D4:2 E4 D4:6 "
+        "E4:2 G4 E4:2 G4 A4:2 E4 A4:2 B4 G4:2 E4 D4:9 "
+        "G4:2 E4 D4:2 C4 D4:2 E4 G4:2 E4 D4:2 C4 D4:2 E4 D4:6 "
+        "E4:2 G4 E4:2 G4 A4:2 E4 A4:2 G4 E4:2 D4 C4:9")
+def arp(ch):
+    r, f, t = ch
+    return '%s %s %s %s %s %s' % (r, f, transpose(r, 12), t, transpose(r, 12), f)
+CHORDS = {'C': ('C3', 'G3', 'E4'), 'G': ('G2', 'D3', 'B3'), 'Am': ('A2', 'E3', 'C4'), 'F': ('F2', 'C3', 'A3'), 'Em': ('E2', 'B2', 'G3')}
+MM_H = 'C C C G C Am G G C C C G C Am G C'.split()
+MM_BASS = ' '.join(arp(CHORDS[c]) for c in MM_H)
+TITLE_MEL = ('e:30,4,14,1 w:FLUTE16 ' + transpose(MM_A, 4) + ' -:6 '
+             'e:26,4,12,1 w:OBOE16 ' + transpose(MM_A, 16) + ' -:6')
+TITLE_BAS = 'e:24,1,0,0 w:HARP32 ' + transpose(MM_BASS, 4) + ' -:6 ' + transpose(MM_BASS, 4) + ' -:6'
+
+# the game: Bach (Petzold), Minuet in G, AABB, soft
+MIN_A = ("D5:2 G4 A4 B4 C5 D5:2 G4:2 G4:2 E5:2 C5 D5 E5 F#5 G5:2 G4:2 G4:2 "
+         "C5:2 D5 C5 B4 A4 B4:2 C5 B4 A4 G4 F#4:2 G4 A4 B4 G4 A4:6 "
+         "D5:2 G4 A4 B4 C5 D5:2 G4:2 G4:2 E5:2 C5 D5 E5 F#5 G5:2 G4:2 G4:2 "
+         "C5:2 D5 C5 B4 A4 B4:2 C5 B4 A4 G4 A4:2 B4 A4 G4 F#4 G4:6 ")
+MIN_B = ("B5:2 G5 A5 B5 G5 A5:2 D5 E5 F#5 D5 G5:2 E5 F#5 G5 D5 C#5:2 B4 C#5 A4:2 "
+         "A4 B4 C#5 D5 E5 F#5 G5:2 F#5:2 E5:2 F#5:2 A4:2 C#5:2 D5:6 "
+         "D5:2 G4 F#4 G4:2 E5:2 G4 F#4 G4:2 D5:2 C5:2 B4:2 A4 G4 F#4 G4 A4:2 "
+         "D4 E4 F#4 G4 A4 B4 C5:2 B4:2 A4:2 B4 D5 G4:2 F#4:2 G4:6 ")
+def bar3(root, fifth):
+    return '%s:4 %s:2' % (root, fifth)
+B3 = {'G': ('G2', 'D3'), 'C': ('C3', 'G3'), 'D': ('D3', 'A2'), 'Am': ('A2', 'E3'), 'A': ('A2', 'E3'), 'Em': ('E2', 'B2'), 'B': ('B2', 'F#3')}
+MIN_HA = 'G G C G Am G D D G G C G Am G D G'.split()
+MIN_HB = 'G D Em A A A D D G C G D D Am D G'.split()
+MIN_BA = ' '.join(bar3(*B3[c]) for c in MIN_HA)
+MIN_BB = ' '.join(bar3(*B3[c]) for c in MIN_HB)
+GAME_MEL = 'e:22,5,10,1 w:FLUTE16 ' + MIN_A + MIN_A + MIN_B + MIN_B + '-:6'
+GAME_BAS = 'e:20,2,0,0 w:HARP32 ' + MIN_BA + ' ' + MIN_BA + ' ' + MIN_BB + ' ' + MIN_BB + ' -:6'
+TUNES = {'TITLE': tune(TITLE_MEL, TITLE_BAS, 13), 'GAME': tune(GAME_MEL, GAME_BAS, 11)}
 
 # ------------------------------------------------------------------ output
 def dcb(data, per=32):
@@ -820,14 +945,14 @@ def main():
                         v |= 0x80 >> x
                 tb.append(v)
     s.append(dcb(tb))
-    intro, title = make_intro(), make_title()
-    save_preview(intro, 'intro_preview.png'); save_preview(title, 'title_preview.png')
+    pics = {'IntroPic': make_intro(), 'TitlePic': make_title(), 'HowToPic': make_howto()}
+    for k, (pic, pal) in pics.items():
+        save_preview(pic, k.lower().replace('pic', '') + '_preview.png', pal)
+        s.append('\tcnop\t0,4')
+        s.append('%s:\tdc.w\t5' % k)
+        s.append(dcw([(r << 8) | (g << 4) | b for r, g, b in pal]))
+        s.append(dcb(planar(pic, 5)))
     tiles_preview(); level_preview()
-    s.append('\tcnop\t0,4')
-    s.append('IntroPic:'); s.append(dcb(planar(intro)))
-    s.append('\tcnop\t0,4')
-    s.append('TitlePic:'); s.append(dcb(planar(title)))
-    s.append('\tcnop\t0,4')
     s.append('; rounds: name (32 bytes), %d x %d cells, spores: count + (x,y) pairs (32 bytes)' % (FW, FH))
     s.append('Levels:')
     for i, L in enumerate(levels):
@@ -854,10 +979,17 @@ def main():
             s.append('Tune%s%s:' % (k.capitalize(), ch))
             vals = []
             for p, ln in seq:
-                vals += [p, ln]
+                if p == 'W':
+                    vals += [0xfffe, ln]
+                elif p == 'E':
+                    vals += [0xfffd] + ln
+                else:
+                    vals += [p, ln]
             vals += [0xffff, 0]
             s.append(dcw(vals))
-        s.append('; %s tune: %d / %d frames' % (k, sum(l for _, l in mel), sum(l for _, l in bas)))
+        fr = lambda q: sum(l for p, l in q if p not in ('W', 'E'))
+        s.append('; %s tune: %d / %d frames' % (k, fr(mel), fr(bas)))
+        print('tune', k, fr(mel), fr(bas))
     s.append('')
     s.append('\tsection\tsounddata,data_c')
     s.append('Waves:')

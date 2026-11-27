@@ -43,7 +43,7 @@ CONTROLS
   Fire / Space / Return   start
   R  or hold fire         retry the round (costs a life)
   P                       pause
-  M                       music on / off
+  M                       music and forest sounds on / off
   Esc                     back to the title (on the title: quit)
 
 NEEDS
@@ -55,6 +55,14 @@ ON A HARD DISK / CF CARD
   or use the WHDLoad version (F10 quits WHDLoad).
 
 CHANGELOG
+  V0.4 (27-11-2026)  New look and sound: a painted loading picture (the
+                     snake in a mushroom forest), a painted title screen
+                     and how-to-play page with the game's own things on
+                     them, fireflies. New music: Grieg's Morning Mood on
+                     the title (flute, oboe and harp) and Bach's Minuet
+                     in G during the game, softer than before. Forest
+                     sounds: birds, wind, a woodpecker, a cuckoo and an
+                     owl (M turns the music and the forest off and on).
   V0.3 (27-11-2026)  Fix: M now really turns the music off and on (it
                      stayed on).
   V0.2 (27-11-2026)  Plays like the MSX original: step-by-step movement,
