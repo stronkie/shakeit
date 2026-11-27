@@ -59,13 +59,14 @@ VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + 
   `src/whdload.s` the WHDLoad slave, `tools/icons.py` the Workbench 3.1 icons.
 
 ## itch.io
-Page live since 27-11-2026, status **In development**, no payments: only the free demo
-(V0.3, rounds 1-3) + a devlog. **Full release planned for the "Stronkie Soft Update Sunday" of
-29-11-2026** (Mark, 27-11-2026): 2.00 EUR, Released, the newest version (disk image ADF, hard drive zip,
-WHDLoad) + the free demo + the print kit.
+https://stronkie.itch.io/stronkies-clover-snake - **Released**, 2.00 EUR (full game released 27-11-2026, V0.4 on
+27-11-2026): V0.4 disk image ADF, hard drive zip and WHDLoad (paid), the free demo V0.4 (rounds 1-3) and the print
+kit (manual, box, labels) free. Older uploads (V0.3) are hidden. Devlogs: demo, full game, V0.3, V0.4 + announcements.
+Theme: Stronkie Soft banner, painted forest background (`art/itch_background_forest.png`, fixed, no repeat),
+BG #081d0f, BG2 #0e2a17, text #e6f5dc, links #f2e42c.
 
 ## Changelog
-### Not yet on itch
+### On itch (27-11-2026)
 - **V0.4** (27-11-2026) New look and sound (Mark: the menu was mostly text, no real loading
   screen, the music irritating): painted loading picture (forest, the snake, fly agarics, clover,
   ball, heart), painted title + how-to-play page (32 colours, 5 bitplanes, colours 0-15 = the

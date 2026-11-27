@@ -10,8 +10,9 @@ while i < len(r):
     t = r[i:i+4]; n = struct.unpack('>I', r[i+4:i+8])[0]; ch[t] = r[i+8:i+8+n]; i += 8+n+(n & 1)
 menu = [tuple(ch[b'CMAP'][k*3:k*3+3]) for k in range(10, 16)]
 a = np.asarray(Image.open(src).convert('RGB')).astype(int)[::2]
-cols, cnt = np.unique(a.reshape(-1, 3), axis=0, return_counts=True)
-pal = [tuple(int(v) for v in c) for c in cols[np.argsort(-cnt)][:10]]
+# 10 colours that cover the picture (not just the most used ones)
+q = Image.fromarray(a.astype(np.uint8)).quantize(10, method=Image.Quantize.MAXCOVERAGE)
+pal = [tuple(q.getpalette()[k*3:k*3+3]) for k in range(10)]
 while len(pal) < 10: pal.append((0, 0, 0))
 P = np.array(pal)
 idx = (((a[:, :, None, :] - P[None, None]) ** 2) * (3, 6, 1)).sum(-1).argmin(-1)
