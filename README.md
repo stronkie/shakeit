@@ -66,6 +66,9 @@ Theme: Stronkie Soft banner, painted forest background (`art/itch_background_for
 BG #081d0f, BG2 #0e2a17, text #e6f5dc, links #f2e42c.
 
 ## Changelog
+### Not yet on itch
+- **V0.5** (27-11-2026) the Stronkie Soft boot intro (SSIntro, from the toolkit) plays before the game on the
+  floppy; hard drive and WHDLoad versions start the game straight away. The demo is unchanged.
 ### On itch (27-11-2026)
 - **V0.4** (27-11-2026) New look and sound (Mark: the menu was mostly text, no real loading
   screen, the music irritating): painted loading picture (forest, the snake, fly agarics, clover,

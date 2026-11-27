@@ -32,6 +32,8 @@ cp $B/icons/CloverSnake.info $B/icons/Install.info $B/icons/ReadMe.txt.info $B/d
 readme "" > $B/disk/ReadMe.txt
 printf '%s\n' "$EXE" > $B/disk/s/startup-sequence
 python3 $TK/tools/adf.py build $B/${NAME}_V$VER.adf "$VOL" $B/disk $TK/tools/bootblock.bin
+# the Stronkie Soft boot intro before the game (toolkit intro/, build it first)
+python3 $TK/tools/add_intro.py $B/${NAME}_V$VER.adf $B/${NAME}_V$VER.adf
 
 # 3. the demo disk
 rm -rf $B/demodisk && mkdir -p $B/demodisk/s

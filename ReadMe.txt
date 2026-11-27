@@ -55,6 +55,10 @@ ON A HARD DISK / CF CARD
   or use the WHDLoad version (F10 quits WHDLoad).
 
 CHANGELOG
+  V0.5 (27-11-2026)  The new Stronkie Soft boot intro plays before the
+                     game on the floppy (animated logo, music "intro
+                     numma" by Animal of Superior Art Creations).
+                     Fire, a mouse button or any key skips it.
   V0.4 (27-11-2026)  New look and sound: a painted loading picture (the
                      snake in a mushroom forest), a painted title screen
                      and how-to-play page with the game's own things on
