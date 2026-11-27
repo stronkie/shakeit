@@ -14,10 +14,10 @@ mushrooms start to sprout.
 ## Files
 | File | What |
 |---|---|
-| `StronkiesCloverSnake_V0.2.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
+| `StronkiesCloverSnake_V0.3.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
 | `StronkiesCloverSnake_Demo.adf` | free demo: rounds 1-3 |
-| `StronkiesCloverSnake_V0.2_harddrive.zip` | drawer for a hard drive / CF card |
-| `StronkiesCloverSnake_V0.2_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
+| `StronkiesCloverSnake_V0.3_harddrive.zip` | drawer for a hard drive / CF card |
+| `StronkiesCloverSnake_V0.3_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
 
 ## Controls
 Joystick port 2 or cursor keys - Fire/Space/Return start - P pause - M music on/off -
@@ -53,6 +53,8 @@ VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + 
 
 ## Changelog
 ### Not yet on itch
+- **V0.3** (27-11-2026) Fix: the M key now really turns the music off/on (the toggle
+  flipped 1 to $FE, which still meant "on").
 - **V0.2** (27-11-2026) Plays like the MSX original: step-by-step movement, pushable
   crates, mushrooms growing on spores each time you eat (block them with the tail),
   retry key (R / hold fire), the round restarts after losing a life, balls only where

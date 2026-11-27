@@ -312,7 +312,7 @@ PollInput:
 	move.b	d1,LastKey
 	cmp.b	#$37,d1			; M: music on / off
 	bne.s	.nokey
-	not.b	MusicOn
+	eor.b	#1,MusicOn
 	bra.s	.nokey
 .up:	clr.b	(a0,d1.w)
 .nokey:	bsr	ReadJoy

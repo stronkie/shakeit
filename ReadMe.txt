@@ -55,6 +55,8 @@ ON A HARD DISK / CF CARD
   or use the WHDLoad version (F10 quits WHDLoad).
 
 CHANGELOG
+  V0.3 (27-11-2026)  Fix: M now really turns the music off and on (it
+                     stayed on).
   V0.2 (27-11-2026)  Plays like the MSX original: step-by-step movement,
                      pushable crates, mushrooms that grow on the spores
                      each time you eat (cover them with your tail to stop

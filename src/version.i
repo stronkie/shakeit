@@ -1,3 +1,3 @@
 VERSION	macro
-	dc.b	'0.2'
+	dc.b	'0.3'
 	endm
