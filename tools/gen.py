@@ -175,6 +175,34 @@ add('HEART2', art([           # blinking frame (dim)
     "...r....",
     "........"]))
 
+add('BLOCK', art([           # a wooden crate you can push
+    "LLLLLLLO",
+    "LOOyOOyy",
+    "LOLOOyOy",
+    "LOOLyOOy",
+    "LOOyLOOy",
+    "LOyOOLOy",
+    "LyOOyOLy",
+    "Oyyyyyyy"]))
+add('SPORE', art([           # a mushroom will grow here
+    "........",
+    ".r...R..",
+    "........",
+    "...R..r.",
+    ".R......",
+    "....r...",
+    "..R...R.",
+    "........"]))
+add('SPORE2', art([          # the next one (blinks)
+    "........",
+    ".R...P..",
+    "...r....",
+    "...P..R.",
+    ".P....r.",
+    "..r.R...",
+    "..P...P.",
+    "........"]))
+
 def shaded(region, fill, hi, lo):
     t = np.zeros((8, 8), np.uint8)
     for y in range(8):
@@ -405,8 +433,9 @@ def save_preview(pic, name):
 
 # ------------------------------------------------------------------ rounds
 FW, FH = 34, 27           # the field inside the border
-EMPTY, WALL, CLOVER, BALL, MUSH = 0, 1, 2, 3, 4
-SX, SY = 17, 21           # start: the head; the body goes down; moving up
+EMPTY, WALL, CLOVER, BALL, MUSH, SNAKE, BLOCK = 0, 1, 2, 3, 4, 5, 6
+SX, SY = 17, 21           # start: the head; the body goes down; facing up
+MAXSPORES = 15
 
 def in_zone(x, y):
     return abs(x - SX) <= 3 and abs(y - SY) <= 5
@@ -416,13 +445,18 @@ class Level:
         self.name = name
         self.m = [[EMPTY] * FW for _ in range(FH)]
         self.r = random.Random(seed)
-    def wall(self, x0, y0, x1, y1):
+        self.spore = []
+    def wall(self, x0, y0, x1, y1, what=WALL):
         for y in range(min(y0, y1), max(y0, y1) + 1):
             for x in range(min(x0, x1), max(x0, x1) + 1):
                 assert not in_zone(x, y), (self.name, x, y)
-                self.m[y][x] = WALL
+                self.m[y][x] = what
+    def at(self, x, y):
+        if not (0 <= x < FW and 0 <= y < FH):
+            return WALL
+        return self.m[y][x]
     def free(self, x, y, margin=0):
-        if not (0 <= x < FW and 0 <= y < FH) or in_zone(x, y):
+        if not (0 <= x < FW and 0 <= y < FH) or in_zone(x, y) or (x, y) in self.spore:
             return False
         for dy in range(-margin, margin + 1):
             for dx in range(-margin, margin + 1):
@@ -434,21 +468,19 @@ class Level:
         assert self.free(x, y), (self.name, x, y)
         self.m[y][x] = what
     def scatter(self, what, n, margin=1):
-        k = 0
-        tries = 0
+        k = tries = 0
         while k < n:
             tries += 1
             assert tries < 20000, self.name
             x, y = self.r.randrange(FW), self.r.randrange(FH)
             if self.free(x, y, margin):
                 self.m[y][x] = what
-                if what == MUSH and not self.connected():
+                if what in (MUSH, BLOCK) and not self.connected():
                     self.m[y][x] = EMPTY
                     continue
                 k += 1
     def clumps(self, n, margin=1):
-        k = 0
-        tries = 0
+        k = tries = 0
         while k < n:
             tries += 1
             assert tries < 20000, self.name
@@ -458,19 +490,50 @@ class Level:
                     for dy in (0, 1):
                         self.m[y + dy][x + dx] = CLOVER
                 k += 1
-    def connected(self):
+    def spores(self, n, chokes):
+        """n places where a mushroom grows each time something is eaten (in this
+        order). About `chokes` of them in narrow places (a gap or a corridor), so
+        the player has to think about the order - or cover them with the tail."""
+        cand = []
+        for y in range(FH):
+            for x in range(FW):
+                if not self.free(x, y):
+                    continue
+                solid = lambda v: v in (WALL, MUSH)
+                if (solid(self.at(x - 1, y)) and solid(self.at(x + 1, y))) or \
+                   (solid(self.at(x, y - 1)) and solid(self.at(x, y + 1))):
+                    cand.append((x, y))
+        self.r.shuffle(cand)
+        picked = []
+        for c in cand:
+            if len(picked) >= chokes:
+                break
+            if all(abs(c[0] - p[0]) + abs(c[1] - p[1]) > 2 for p in picked):
+                picked.append(c)
+        tries = 0
+        while len(picked) < n:
+            tries += 1
+            assert tries < 20000, self.name
+            x, y = self.r.randrange(FW), self.r.randrange(FH)
+            if self.free(x, y, 1) and all(abs(x - p[0]) + abs(y - p[1]) > 3 for p in picked):
+                picked.append((x, y))
+        self.r.shuffle(picked)
+        assert len(picked) <= MAXSPORES
+        self.spore = picked
+    def connected(self, blocks_pass=True):
         seen = set([(SX, SY)])
         q = deque([(SX, SY)])
+        stop = (WALL, MUSH) if blocks_pass else (WALL, MUSH, BLOCK)
         while q:
             x, y = q.popleft()
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 xx, yy = x + dx, y + dy
-                if 0 <= xx < FW and 0 <= yy < FH and (xx, yy) not in seen and self.m[yy][xx] not in (WALL, MUSH):
+                if 0 <= xx < FW and 0 <= yy < FH and (xx, yy) not in seen and self.m[yy][xx] not in stop:
                     seen.add((xx, yy))
                     q.append((xx, yy))
         for y in range(FH):
             for x in range(FW):
-                if self.m[y][x] not in (WALL, MUSH) and (x, y) not in seen:
+                if self.m[y][x] not in stop and (x, y) not in seen:
                     return False
         return True
     def check(self):
@@ -479,27 +542,40 @@ class Level:
             for x in range(FW):
                 if in_zone(x, y):
                     assert self.m[y][x] == EMPTY, (self.name, x, y)
-        # no dead ends of width one between two walls that the snake can't turn in? (just connected)
+                if self.m[y][x] == BLOCK:      # every crate can be pushed one way or another
+                    ok = False
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        if self.at(x - dx, y - dy) not in (WALL, MUSH, BLOCK) and self.at(x + dx, y + dy) == EMPTY:
+                            ok = True
+                    assert ok, (self.name, 'stuck crate', x, y)
+        for (x, y) in self.spore:
+            assert self.m[y][x] == EMPTY
         n = sum(r.count(CLOVER) for r in self.m)
         assert n > 0
         return n
 
 levels = []
 
-L = Level('OPEN MEADOW', 1)
-L.scatter(CLOVER, 26, 1); L.scatter(MUSH, 10, 1)
+L = Level('FIRST STEPS', 1)
+L.scatter(CLOVER, 16, 1); L.scatter(MUSH, 5, 1); L.scatter(BLOCK, 3, 1)
+L.spores(4, 0)
 levels.append(L)
 
 L = Level('THREE WALLS', 2)
 L.wall(6, 9, 6, 26); L.wall(12, 0, 12, 17); L.wall(22, 0, 22, 17); L.wall(28, 9, 28, 26)
-L.clumps(9, 1)
+L.put(6, 4, BLOCK); L.put(28, 4, BLOCK)
+L.clumps(7, 1)
+L.spores(6, 3)
 levels.append(L)
 
-L = Level('THE BOX', 3)
+L = Level('THE CRATE DOOR', 3)
 L.wall(8, 4, 25, 4); L.wall(8, 4, 8, 13); L.wall(25, 4, 25, 13); L.wall(8, 13, 14, 13); L.wall(19, 13, 25, 13)
+for x in range(15, 19):
+    L.put(x, 13, BLOCK)
 for x in (11, 14, 17, 20, 23):
     L.put(x, 7, CLOVER); L.put(x, 10, CLOVER)
-L.scatter(CLOVER, 14, 1); L.scatter(MUSH, 10, 1)
+L.scatter(CLOVER, 8, 1); L.scatter(MUSH, 6, 1)
+L.spores(6, 2)
 levels.append(L)
 
 L = Level('SHELVES', 4)
@@ -510,12 +586,16 @@ for x in range(13, 33, 3):
     L.put(x, 7, CLOVER)
 for x in range(3, 30, 4):
     L.put(x, 11, CLOVER)
-L.scatter(MUSH, 8, 1)
+L.put(27, 4, BLOCK); L.put(5, 9, BLOCK); L.put(16, 14, BLOCK)
+L.scatter(MUSH, 6, 1)
+L.spores(7, 4)
 levels.append(L)
 
 L = Level('FOUR ROOMS', 5)
-L.wall(16, 0, 16, 5); L.wall(16, 9, 16, 13); L.wall(0, 13, 9, 13); L.wall(24, 13, 33, 13); L.wall(9, 13, 9, 15); L.wall(24, 13, 24, 15)
-L.clumps(8, 1); L.scatter(MUSH, 8, 1)
+L.wall(16, 0, 16, 13); L.wall(0, 13, 33, 13)
+L.m[7][16] = BLOCK; L.m[13][8] = BLOCK; L.m[13][25] = BLOCK
+L.clumps(6, 1); L.scatter(MUSH, 6, 1)
+L.spores(7, 3)
 levels.append(L)
 
 L = Level('PILLARS', 6)
@@ -523,11 +603,13 @@ for y in (2, 8, 14, 20):
     for x in (2, 8, 14, 20, 26, 31):
         if not any(in_zone(x + dx, y + dy) for dx in (-1, 0, 1, 2) for dy in (-1, 0, 1, 2)):
             L.wall(x, y, x + 1, y + 1)
-L.scatter(CLOVER, 28, 1); L.scatter(MUSH, 6, 1)
+L.scatter(BLOCK, 6, 1); L.scatter(CLOVER, 22, 1); L.scatter(MUSH, 5, 1)
+L.spores(8, 5)
 levels.append(L)
 
 L = Level('MUSHROOM FOREST', 7)
-L.scatter(MUSH, 34, 1); L.scatter(CLOVER, 26, 1)
+L.scatter(MUSH, 26, 1); L.scatter(CLOVER, 20, 1); L.scatter(BLOCK, 5, 1)
+L.spores(8, 4)
 levels.append(L)
 
 L = Level('THE SPIRAL', 8)
@@ -535,9 +617,12 @@ L.wall(3, 1, 30, 1); L.wall(30, 1, 30, 14); L.wall(7, 14, 30, 14); L.wall(3, 1, 
 L.wall(7, 5, 7, 14); L.wall(7, 5, 26, 5); L.wall(26, 5, 26, 10); L.wall(11, 10, 26, 10)
 for x in range(9, 25, 3):
     L.put(x, 3, CLOVER); L.put(x + 1, 12, CLOVER)
-for x in range(10, 24, 3):
+for x in range(12, 24, 3):
     L.put(x, 8, CLOVER)
-L.scatter(CLOVER, 10, 1); L.scatter(MUSH, 6, 1)
+L.m[12][7] = EMPTY; L.m[13][7] = EMPTY       # the way in at the bottom left ...
+L.put(5, 12, BLOCK)                          # ... with a crate in front of it
+L.scatter(CLOVER, 8, 1); L.scatter(MUSH, 5, 1)
+L.spores(8, 5)
 levels.append(L)
 
 L = Level('THE COMB', 9)
@@ -547,7 +632,10 @@ for x in range(2, 34, 4):
 for x in range(4, 33, 4):
     if not in_zone(x, 6):
         L.put(x, 4, CLOVER); L.put(x, 9, CLOVER)
-L.scatter(CLOVER, 8, 1); L.scatter(MUSH, 8, 1)
+for x in (4, 12, 24):
+    L.put(x, 12, BLOCK)
+L.scatter(CLOVER, 6, 1); L.scatter(MUSH, 6, 1)
+L.spores(10, 6)
 levels.append(L)
 
 L = Level('DIAMOND', 10)
@@ -559,22 +647,28 @@ for i in range(8):
 for (x, y) in ((17, 5), (15, 7), (19, 7), (13, 9), (21, 9), (17, 9), (15, 11), (19, 11), (17, 3), (17, 13)):
     if L.free(x, y):
         L.put(x, y, CLOVER)
-L.scatter(CLOVER, 16, 1); L.scatter(MUSH, 10, 1)
+L.put(13, 12, BLOCK); L.put(21, 12, BLOCK)
+L.scatter(CLOVER, 12, 1); L.scatter(MUSH, 8, 1)
+L.spores(10, 5)
 levels.append(L)
 
 L = Level('CORRIDORS', 11)
 L.wall(0, 3, 29, 3); L.wall(4, 7, 33, 7); L.wall(0, 11, 29, 11); L.wall(4, 15, 11, 15); L.wall(23, 15, 33, 15)
 for x in range(2, 30, 3):
     L.put(x, 1, CLOVER); L.put(x + 2, 5, CLOVER); L.put(x, 9, CLOVER); L.put(x + 2, 13, CLOVER)
-L.scatter(MUSH, 6, 1)
+L.put(31, 9, BLOCK); L.put(2, 5, BLOCK)
+L.scatter(MUSH, 4, 1)
+L.spores(11, 7)
 levels.append(L)
 
 L = Level('THE GRAND FINALE', 12)
 L.wall(4, 3, 13, 3); L.wall(20, 3, 29, 3); L.wall(4, 3, 4, 8); L.wall(29, 3, 29, 8)
 L.wall(9, 9, 24, 9)
+L.put(16, 3, BLOCK); L.put(17, 3, BLOCK)
 for (x, y) in ((1, 15), (31, 15), (1, 22), (31, 22)):
     L.wall(x, y, x + 1, y + 1)
-L.clumps(6, 1); L.scatter(CLOVER, 10, 1); L.scatter(MUSH, 18, 1)
+L.clumps(5, 1); L.scatter(CLOVER, 8, 1); L.scatter(MUSH, 14, 1); L.scatter(BLOCK, 4, 1)
+L.spores(12, 7)
 levels.append(L)
 
 def level_preview():
@@ -582,14 +676,16 @@ def level_preview():
     sc = 4
     im = Image.new('RGB', (cols * (FW + 2) * sc, 3 * (FH + 2) * sc), (30, 30, 30))
     px = im.load()
-    colr = {EMPTY: (0, 0, 0), WALL: (230, 230, 40), CLOVER: (50, 210, 50), MUSH: (230, 50, 30)}
+    colr = {EMPTY: (0, 0, 0), WALL: (230, 230, 40), CLOVER: (50, 210, 50), MUSH: (230, 50, 30), BLOCK: (200, 130, 40)}
     for i, L in enumerate(levels):
         ox, oy = (i % cols) * (FW + 2) * sc, (i // cols) * (FH + 2) * sc
         for y in range(FH):
             for x in range(FW):
                 c = colr[L.m[y][x]]
                 if in_zone(x, y):
-                    c = (20, 20, 60) if c == (0, 0, 0) else (255, 0, 255)
+                    c = (20, 20, 60)
+                if (x, y) in L.spore:
+                    c = (140, 0, 140)
                 if (x, y) == (SX, SY):
                     c = (60, 200, 255)
                 for yy in range(sc):
@@ -631,6 +727,9 @@ sfx('BALL', 'PU16', [(period('G5', 16), 46)] * 3 + [(0x7fff, 0)] + [(period('D6'
 sfx('HEART', 'SQ16', [(period(n, 16), 44) for n in ('C5', 'C5', 'E5', 'E5', 'G5', 'G5', 'C6', 'C6', 'E6', 'E6', 'G6', 'G6')] + [(period('C6', 16), v) for v in (30, 20, 10)])
 sfx('DIE', 'NOISE', [(160 + i * 12, max(0, 60 - i)) for i in range(60)])
 sfx('SPROUT', 'TRI32', [(period('C3', 32) + i * 30, 50 - i * 4) for i in range(12)])
+sfx('PUSH', 'TRI32', [(period('E2', 32) + i * 40, 60 - i * 6) for i in range(8)])
+sfx('BUMP', 'NOISE', [(400, 40), (500, 25), (600, 10)])
+sfx('FIZZLE', 'NOISE', [(180 + i * 25, 30 - i * 2) for i in range(14)])
 sfx('TICK', 'PU16', [(period('A5', 16), 30), (period('A5', 16), 12)])
 sfx('LIFE', 'SQ16', [(period(n, 16), 46) for n in ('G5', 'G5', 'G5', 'C6', 'C6', 'C6', 'E6', 'E6', 'E6', 'G6', 'G6', 'G6', 'G6', 'G6')] + [(period('G6', 16), v) for v in (30, 20, 10)])
 def jingle(notes, wave='SQ16', vol=46, step=6):
@@ -729,14 +828,16 @@ def main():
     s.append('\tcnop\t0,4')
     s.append('TitlePic:'); s.append(dcb(planar(title)))
     s.append('\tcnop\t0,4')
-    s.append('; rounds: name (32 bytes), then %d x %d cells' % (FW, FH))
+    s.append('; rounds: name (32 bytes), %d x %d cells, spores: count + (x,y) pairs (32 bytes)' % (FW, FH))
     s.append('Levels:')
     for i, L in enumerate(levels):
         n = L.check()
-        print('round %2d %-18s clovers %3d mushrooms %3d' % (i + 1, L.name, n, sum(r.count(MUSH) for r in L.m)))
+        print('round %2d %-18s clovers %3d mushrooms %3d crates %d spores %d' % (i + 1, L.name, n, sum(r.count(MUSH) for r in L.m), sum(r.count(BLOCK) for r in L.m), len(L.spore)))
         nm = L.name.encode('ascii')[:31].ljust(32, b'\0')
         s.append(dcb(nm))
         s.append(dcb(bytes(v for r in L.m for v in r), FW))
+        sp = bytes([len(L.spore)]) + bytes(v for p in L.spore for v in p)
+        s.append(dcb(sp.ljust(32, b'\0')))
     s.append('\tcnop\t0,4')
     s.append('SfxTab:')
     for k in SFX:

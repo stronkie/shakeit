@@ -43,13 +43,14 @@ C_CLOVER equ	2
 C_BALL	equ	3
 C_MUSH	equ	4
 C_SNAKE	equ	5
+C_BLOCK	equ	6
 
 FIELDX	equ	3			; the field inside the border (screen cells)
 FIELDY	equ	4
 FIELDW	equ	34
 FIELDH	equ	27
 STARTPOS equ	25*40+20		; the head at the start (moving up)
-LEVSIZE	equ	32+FIELDW*FIELDH
+LEVSIZE	equ	32+FIELDW*FIELDH+32
 RINGMASK equ	1023
 GROWBY	equ	2
 
@@ -922,7 +923,7 @@ TxVersion:	dc.b	'@ 2026  -  VERSION '
 		endc
 		dc.b	0
 TxControls:	dc.b	'JOYSTICK IN PORT 2 OR CURSOR KEYS',0
-TxKeys:		dc.b	'M MUSIC  P PAUSE  ESC QUIT',0
+TxKeys:		dc.b	'R RETRY  P PAUSE  M MUSIC  ESC QUIT',0
 TxBlank:	dc.b	'                                        ',0
 TxDevMode:	dc.b	'DEV MODE',0
 		if	DEMO
@@ -931,22 +932,24 @@ TxDemoTitle:	dc.b	'DEMO: 3 ROUNDS',0
 	even
 ; how to play: row, column, font, tile, text
 HowTo:	dc.b	1,14,1,0,'HOW TO PLAY',0
-	dc.b	3,3,0,0,'STEER YOUR SNAKE ACROSS THE MEADOW.',0
-	dc.b	6,6,2,T_CLOVER,'CLOVER  20 - YOUR SNAKE GROWS',0
-	dc.b	7,6,0,0,'AND A BALL POPS UP SOMEWHERE',0
-	dc.b	9,6,0,T_BALL,'BALL    50 - EAT THEM ALL TOO!',0
-	dc.b	11,6,0,T_MUSH,'MUSHROOM  - POISON, KEEP AWAY',0
-	dc.b	13,6,0,T_HEART,'HEART  100 - BONUS MULTIPLIER +1',0
-	dc.b	15,6,0,T_WALL10,'WALLS AND YOUR OWN TAIL KILL',0
-	dc.b	18,3,3,0,'CLEAR EVERY CLOVER AND EVERY BALL',0
-	dc.b	19,3,3,0,'TO FINISH THE ROUND. THE BONUS',0
-	dc.b	20,3,3,0,'COUNTS DOWN - WHEN IT RUNS OUT,',0
-	dc.b	21,3,3,0,'NEW MUSHROOMS START TO SPROUT!',0
-	dc.b	23,3,0,0,'EXTRA LIFE EVERY 10000 POINTS.',0
+	dc.b	3,1,0,0,'THE SNAKE ONLY MOVES WHEN YOU DO: ONE',0
+	dc.b	4,1,0,0,'STEP FOR EVERY PUSH OF THE STICK.',0
+	dc.b	6,6,2,T_CLOVER,'CLOVER 20 - GROW, A BALL POPS UP',0
+	dc.b	8,6,0,T_BALL,'BALL   50 - EAT THEM ALL TOO!',0
+	dc.b	10,6,0,T_HEART,'HEART 100 - BONUS MULTIPLIER +1',0
+	dc.b	12,6,1,T_BLOCK,'CRATE - PUSH IT WHERE YOU NEED IT',0
+	dc.b	14,6,0,T_SPORE2,'EVERY BITE GROWS A MUSHROOM HERE',0
+	dc.b	15,6,0,0,'(BLINKING = NEXT). COVER IT WITH',0
+	dc.b	16,6,0,0,'YOUR TAIL OR A CRATE TO STOP IT!',0
+	dc.b	18,6,0,T_MUSH,'POISON! AS DEADLY AS WALLS & TAIL',0
+	dc.b	21,3,3,0,'STUCK? PRESS R OR HOLD FIRE TO',0
+	dc.b	22,3,3,0,'RETRY THE ROUND (COSTS A LIFE).',0
+	dc.b	24,3,0,0,'BE QUICK: THE BONUS COUNTS DOWN.',0
+	dc.b	25,3,0,0,'EXTRA LIFE EVERY 10000 POINTS.',0
 	if	DEMO
-	dc.b	25,3,2,0,'THIS DEMO HAS 3 OF THE 12 ROUNDS.',0
+	dc.b	27,3,2,0,'THIS DEMO HAS 3 OF THE 12 ROUNDS.',0
 	else
-	dc.b	25,3,2,0,'12 ROUNDS - THEN IT ALL GOES FASTER.',0
+	dc.b	27,3,2,0,'12 ROUNDS - THEN THEY COME BACK!',0
 	endc
 	dc.b	29,10,1,0,'PRESS FIRE TO START',0
 	dc.b	0
@@ -983,16 +986,16 @@ Game:	clr.l	Score
 	else
 	bra.s	.round
 	endc
-.died:	bsr	DeathAnim
-	tst.b	DevMode
+.died:	tst.b	Retry
+	bne.s	.nr
+	bsr	DeathAnim
+.nr:	tst.b	DevMode
 	bne.s	.again
 	subq.w	#1,Lives
 	bsr	DrawLives
 	tst.w	Lives
 	beq.s	.over
-.again:	bsr	RemoveSnake
-	bsr	RemoveHeart
-	bsr	InitSnake
+.again:	bsr	SetupRound		; the round starts again as it was
 	bsr	GetReady
 	bra.s	.play
 .over:	bsr	GameOver
@@ -1017,30 +1020,16 @@ StartRound:
 	move.w	d0,d1			; loops
 	swap	d0
 	move.w	d0,LevelIdx
-	; speed: frames a step, 8 at the start, quicker every 3 rounds
-	; and 2 quicker every time round 12 is done
-	moveq	#0,d2
-	move.w	d0,d2
-	divu	#3,d2
-	moveq	#8,d3
-	sub.w	d2,d3
-	add.w	d1,d1
+	; the bonus: 10 points less every 40 frames, quicker every time
+	; round 12 is done
+	moveq	#40,d3
+	mulu	#10,d1
 	sub.w	d1,d3
-	cmp.w	#3,d3
+	cmp.w	#20,d3
 	bge.s	.sp
-	moveq	#3,d3
-.sp:	move.w	d3,Speed
-	bsr	LoadLevel
-	bsr	DrawHud
-	bsr	DrawField
-	move.w	#1000,Bonus
-	move.w	#1,Mult
-	bsr	DrawBonus
-	clr.b	HeartOn
-	move.w	#400,HeartTimer
-	move.w	#30,BonusTimer
-	move.w	#250,SproutTimer
-	bsr	InitSnake
+	moveq	#20,d3
+.sp:	move.w	d3,BonusRate
+	bsr	SetupRound
 	bsr	FadeIn
 	; ROUND n + the name
 	lea	TxRound(pc),a0
@@ -1074,6 +1063,18 @@ StartRound:
 	bsr	HideMsg
 	bra	ResetControl
 
+; SetupRound: the round from its start (also after losing a life)
+SetupRound:
+	clr.b	HeartOn
+	move.w	#400,HeartTimer
+	move.w	#1000,Bonus
+	move.w	#1,Mult
+	move.w	BonusRate,BonusTimer
+	bsr	LoadLevel
+	bsr	DrawHud
+	bsr	DrawField
+	bra	InitSnake
+
 GetReady:
 	lea	TxReady(pc),a0
 	moveq	#14,d1
@@ -1085,18 +1086,18 @@ GetReady:
 	moveq	#14,d1
 	bsr	HideMsg
 ResetControl:
-	clr.w	QCount
 	clr.b	JoyHit
 	clr.b	FireHit
 	clr.b	Dead
+	clr.b	Retry
+	clr.w	FireHold
+	clr.w	RepeatTimer
 	move.b	#$ff,LastKey
-	move.w	Speed,StepTimer
 	rts
 
 TxRound:	dc.b	'ROUND ',0
 TxReady:	dc.b	'GET READY!',0
 TxClear:	dc.b	'ROUND CLEAR!',0
-TxBonus:	dc.b	'BONUS',0
 TxPaused:	dc.b	'PAUSED',0
 TxGameOver:	dc.b	'GAME OVER',0
 TxScore:	dc.b	'SCORE:',0
@@ -1107,17 +1108,20 @@ TxRoundH:	dc.b	'ROUND:',0
 TxTimes:	dc.b	'*',0
 TxDemo:		dc.b	'DEMO',0
 TxDev:		dc.b	'DEV',0
+TxRetry:	dc.b	'R / HOLD FIRE = RETRY',0
 	even
 
-; LoadLevel: Map, TileMap and Remaining from level LevelIdx
+; LoadLevel: Map, SporeMap, TileMap and Remaining from level LevelIdx
 LoadLevel:
 	lea	Map,a0
 	move.w	#40*32-1,d0
 .f:	move.b	#C_WALL,(a0)+
 	dbf	d0,.f
 	lea	TileMap,a0
+	lea	SporeMap,a2
 	move.w	#40*32-1,d0
 .t:	clr.w	(a0)+
+	clr.b	(a2)+
 	dbf	d0,.t
 	lea	Levels,a1
 	move.w	LevelIdx,d0
@@ -1137,7 +1141,28 @@ LoadLevel:
 .nc:	dbf	d0,.x
 	lea	40-FIELDW(a0),a0
 	dbf	d1,.y
-	; the tiles of the field and its border
+	; the spores: where a mushroom grows, in this order, each time
+	; something is eaten
+	moveq	#0,d0
+	move.b	(a1)+,d0
+	move.w	d0,SporeN
+	clr.w	SporeNext
+	lea	SporeList,a2
+	lea	SporeMap,a3
+	subq.w	#1,d0
+	bmi.s	.ns
+.sp:	moveq	#0,d1
+	move.b	(a1)+,d1
+	moveq	#0,d2
+	move.b	(a1)+,d2
+	add.w	#FIELDY,d2
+	mulu	#40,d2
+	add.w	d1,d2
+	add.w	#FIELDX,d2
+	move.w	d2,(a2)+
+	move.b	#1,(a3,d2.w)
+	dbf	d0,.sp
+.ns:	; the tiles of the field and its border
 	move.w	#(FIELDY-1)*40+FIELDX-1,d0
 	moveq	#FIELDH+1,d3		; rows
 .ry:	moveq	#FIELDW+1,d4		; columns
@@ -1154,13 +1179,27 @@ LoadLevel:
 	dbf	d3,.ry
 	rts
 
+; EmptyTile: d0 = an empty cell -> d2 = its tile (the spores show)
+EmptyTile:
+	move.l	a0,-(sp)
+	lea	SporeMap,a0
+	moveq	#T_EMPTY,d2
+	tst.b	(a0,d0.w)
+	beq.s	.x
+	move.w	#T_SPORE,d2
+.x:	move.l	(sp)+,a0
+	rts
+
 ; CellTile: d0 = cell -> d2 = its tile (walls by their neighbours)
 CellTile:
 	movem.l	d0-d1/d3/a0,-(sp)
 	lea	Map,a0
 	moveq	#0,d1
 	move.b	(a0,d0.w),d1
-	add.w	d1,d1
+	bne.s	.ne
+	bsr	EmptyTile
+	bra.s	.x
+.ne:	add.w	d1,d1
 	move.w	.tab(pc,d1.w),d2
 	cmp.w	#C_WALL*2,d1
 	bne.s	.x
@@ -1194,7 +1233,7 @@ CellTile:
 	add.w	d3,d2
 .x:	movem.l	(sp)+,d0-d1/d3/a0
 	rts
-.tab:	dc.w	T_EMPTY,T_WALL0,T_CLOVER,T_BALL,T_MUSH,T_EMPTY
+.tab:	dc.w	T_EMPTY,T_WALL0,T_CLOVER,T_BALL,T_MUSH,T_EMPTY,T_BLOCK
 
 DrawField:
 	move.w	#(FIELDY-1)*40+FIELDX-1,d0
@@ -1209,6 +1248,8 @@ DrawField:
 	dbf	d3,.y
 	rts
 
+;---------------------------------------------------------------------
+; the HUD
 ;---------------------------------------------------------------------
 ; the HUD
 DrawHud:
@@ -1250,6 +1291,10 @@ DrawHud:
 	move.w	#T_FONTG,d2
 	bsr	DrawText
 	endc
+	lea	TxRetry(pc),a0
+	moveq	#2,d1
+	move.w	#T_FONTW,d2
+	bsr	CenterText
 	tst.b	DevMode
 	beq.s	.nd
 	lea	TxDev(pc),a0
@@ -1415,35 +1460,82 @@ DrawSeg:
 	movem.l	(sp)+,d0-d4
 	rts
 
-RemoveSnake:
-	movem.l	d0-d2/a0,-(sp)
-	move.w	Len,d1
-	subq.w	#1,d1
-	lea	Map,a0
-.l:	move.w	d1,d0
-	bsr	SegPos
-	clr.b	(a0,d0.w)
-	moveq	#T_EMPTY,d2
-	bsr	SetCell
-	dbf	d1,.l
-	movem.l	(sp)+,d0-d2/a0
-	rts
-
 DirDelta:	dc.w	-40,1,40,-1
 
-; Step: move the snake one cell
-Step:	tst.w	QCount
-	beq.s	.noq
-	move.w	Queue,Dir
-	move.w	Queue+2,Queue
-	subq.w	#1,QCount
-.noq:	move.w	Dir,d0
+;---------------------------------------------------------------------
+; step by step: the snake only moves when the stick is pushed. One
+; push = one step; held, it steps on after a short wait.
+StepInput:
+	move.b	JoyHit,d0
+	clr.b	JoyHit
+	and.w	#15,d0
+	beq.s	.held
+	bsr	PickDir
+	tst.w	d1
+	bmi.s	.x
+	move.w	#12,RepeatTimer
+	bra	StepTo
+.held:	move.b	JoyDir,d0
+	and.w	#15,d0
+	bne.s	.h
+	clr.w	RepeatTimer
+.x:	rts
+.h:	tst.w	RepeatTimer
+	bne.s	.h2
+	move.w	#12,RepeatTimer		; held from before: wait first
+	rts
+.h2:	subq.w	#1,RepeatTimer
+	bgt.s	.x
+	move.w	#5,RepeatTimer
+	bsr	PickDir
+	tst.w	d1
+	bmi.s	.x
+	bra	StepTo
+
+; PickDir: d0 = direction bits -> d1 = a direction (never straight back), or -1
+PickDir:
+	move.w	Dir,d2
+	eor.w	#2,d2
+	moveq	#0,d1
+.b:	btst	d1,d0
+	beq.s	.n
+	cmp.w	d2,d1
+	bne.s	.x
+.n:	addq.w	#1,d1
+	cmp.w	#4,d1
+	blt.s	.b
+	moveq	#-1,d1
+.x:	rts
+
+; StepTo: d1 = direction: one step (pushing a crate, eating, dying)
+StepTo:	move.w	d1,d0
 	add.w	d0,d0
-	move.w	DirDelta(pc,d0.w),d1
+	lea	DirDelta(pc),a1
+	move.w	(a1,d0.w),d5		; the step
 	moveq	#0,d0
 	bsr	SegPos
-	add.w	d1,d0
+	add.w	d5,d0
 	move.w	d0,d3			; the new head cell
+	lea	Map,a0
+	cmp.b	#C_BLOCK,(a0,d3.w)
+	bne.s	.nblk
+	; a crate: push it on if the cell behind it is free
+	move.w	d3,d0
+	add.w	d5,d0
+	tst.b	(a0,d0.w)
+	bne	.bump
+	tst.b	HeartOn
+	beq.s	.ph
+	cmp.w	HeartPos,d0
+	beq	.bump
+.ph:	move.b	#C_BLOCK,(a0,d0.w)
+	move.w	#T_BLOCK,d2
+	bsr	SetCell
+	clr.b	(a0,d3.w)
+	moveq	#SFX_PUSH,d0
+	bsr	PlaySfx
+.nblk:	move.w	d1,Dir
+	clr.b	Ate
 	tst.b	HeartOn
 	beq.s	.nh
 	cmp.w	HeartPos,d3
@@ -1473,6 +1565,7 @@ Step:	tst.w	QCount
 	addq.w	#GROWBY,Grow
 	subq.w	#1,Remaining
 	st	SpawnBall
+	st	Ate
 	moveq	#SFX_CLOVER,d0
 	bsr	PlaySfx
 	bra.s	.move
@@ -1481,6 +1574,7 @@ Step:	tst.w	QCount
 	moveq	#50,d0
 	bsr	AddScore
 	subq.w	#1,Remaining
+	st	Ate
 	moveq	#SFX_BALL,d0
 	bsr	PlaySfx
 .move:	tst.w	Grow
@@ -1491,7 +1585,7 @@ Step:	tst.w	QCount
 	subq.w	#1,d0
 	bsr	SegPos
 	clr.b	(a0,d0.w)
-	moveq	#T_EMPTY,d2
+	bsr	EmptyTile
 	bsr	SetCell
 	subq.w	#1,Len
 .head:	move.w	HeadIdx,d0
@@ -1510,25 +1604,177 @@ Step:	tst.w	QCount
 	move.w	Len,d0
 	subq.w	#1,d0
 	bsr	DrawSeg
-	tst.b	SpawnBall
+	tst.b	Ate			; every bite grows the next mushroom
+	beq.s	.na
+	bsr	SporeSprout
+.na:	tst.b	SpawnBall
 	beq.s	.x
 	clr.b	SpawnBall
-	moveq	#0,d7
-	bsr	RandomCell
-	tst.w	d0
-	bmi.s	.x
-	move.b	#C_BALL,(a0,d0.w)
+	bsr	SpawnBallBFS
+.x:	rts
+.bump:	moveq	#SFX_BUMP,d0
+	bra	PlaySfx
+.die:	st	Dead
+	rts
+
+; SporeSprout: the next spore grows a mushroom - unless something lies
+; on it (the snake, a crate, the heart): then it is gone for good
+SporeSprout:
+	movem.l	d0-d2/a0,-(sp)
+	move.w	SporeNext,d1
+	cmp.w	SporeN,d1
+	bge.s	.x
+	addq.w	#1,SporeNext
+	add.w	d1,d1
+	lea	SporeList,a0
+	move.w	(a0,d1.w),d0
+	lea	SporeMap,a0
+	clr.b	(a0,d0.w)
+	lea	Map,a0
+	tst.b	(a0,d0.w)
+	bne.s	.blocked
+	tst.b	HeartOn
+	beq.s	.grow
+	cmp.w	HeartPos,d0
+	beq.s	.hb
+.grow:	move.b	#C_MUSH,(a0,d0.w)
+	moveq	#T_MUSH,d2
+	bsr	SetCell
+	moveq	#SFX_SPROUT,d0
+	bsr	PlaySfx
+	bra.s	.x
+.hb:	moveq	#T_EMPTY,d2		; (the heart is drawn over it)
+	bsr	SetCell
+.blocked:
+	moveq	#SFX_FIZZLE,d0
+	bsr	PlaySfx
+.x:	movem.l	(sp)+,d0-d2/a0
+	rts
+
+; SporeBlink: the next spore blinks
+SporeBlink:
+	move.w	SporeNext,d1
+	cmp.w	SporeN,d1
+	bge.s	.x
+	add.w	d1,d1
+	lea	SporeList,a0
+	move.w	(a0,d1.w),d0
+	lea	Map,a0
+	tst.b	(a0,d0.w)
+	bne.s	.x
+	move.w	#T_SPORE,d2
+	btst	#4,FrameCount+3
+	beq.s	.d
+	move.w	#T_SPORE2,d2
+.d:	bra	DrawPos
+.x:	rts
+
+; SpawnBallBFS: a ball on a free cell the snake can reach from where it
+; is now (flood fill from the head), not on a spore, not right next to
+; the head
+SpawnBallBFS:
+	movem.l	d0-d7/a0-a4,-(sp)
+	lea	Visit,a0
+	move.w	#40*32/4-1,d0
+	moveq	#0,d1
+.c:	move.l	d1,(a0)+
+	dbf	d0,.c
+	lea	Visit,a0
+	lea	Map,a1
+	lea	BfsQ,a2
+	lea	DirDelta(pc),a4
+	moveq	#0,d0
+	bsr	SegPos
+	move.w	d0,d7			; the head
+	move.w	d0,(a2)
+	st	(a0,d0.w)
+	moveq	#0,d5			; read
+	moveq	#1,d6			; write
+.q:	cmp.w	d6,d5
+	bge.s	.done
+	move.w	d5,d0
+	add.w	d0,d0
+	move.w	(a2,d0.w),d1
+	addq.w	#1,d5
+	moveq	#3,d4
+.n:	move.w	d4,d0
+	add.w	d0,d0
+	move.w	(a4,d0.w),d2
+	add.w	d1,d2
+	tst.b	(a0,d2.w)
+	bne.s	.nn
+	move.b	(a1,d2.w),d3
+	beq.s	.ok
+	cmp.b	#C_CLOVER,d3
+	beq.s	.ok
+	cmp.b	#C_BALL,d3
+	bne.s	.nn
+.ok:	st	(a0,d2.w)
+	move.w	d6,d0
+	add.w	d0,d0
+	move.w	d2,(a2,d0.w)
+	addq.w	#1,d6
+.nn:	dbf	d4,.n
+	bra.s	.q
+.done:	lea	CandList,a3
+	lea	SporeMap,a4
+	moveq	#0,d4			; candidates
+	moveq	#0,d5
+	move.w	d7,d5
+	divu	#40,d5			; the head: col:row
+	moveq	#1,d0
+.cl:	cmp.w	d6,d0
+	bge.s	.pick
+	move.w	d0,d1
+	add.w	d1,d1
+	move.w	(a2,d1.w),d1
+	tst.b	(a1,d1.w)
+	bne.s	.cn
+	tst.b	(a4,d1.w)
+	bne.s	.cn
+	tst.b	HeartOn
+	beq.s	.c1
+	cmp.w	HeartPos,d1
+	beq.s	.cn
+.c1:	moveq	#0,d2
+	move.w	d1,d2
+	divu	#40,d2
+	move.w	d2,d3
+	sub.w	d5,d3
+	bpl.s	.a1
+	neg.w	d3
+.a1:	swap	d2
+	swap	d5
+	sub.w	d5,d2
+	swap	d5
+	tst.w	d2
+	bpl.s	.a2
+	neg.w	d2
+.a2:	add.w	d2,d3
+	cmp.w	#3,d3
+	blt.s	.cn
+	move.w	d1,(a3)+
+	addq.w	#1,d4
+.cn:	addq.w	#1,d0
+	bra.s	.cl
+.pick:	tst.w	d4
+	beq.s	.x
+	move.w	d4,d0
+	bsr	RandN
+	add.w	d0,d0
+	lea	CandList,a3
+	move.w	(a3,d0.w),d0
+	move.b	#C_BALL,(a1,d0.w)
 	moveq	#T_BALL,d2
 	bsr	SetCell
 	addq.w	#1,Remaining
-.x:	rts
-.die:	st	Dead
+.x:	movem.l	(sp)+,d0-d7/a0-a4
 	rts
 
 ; RandomCell: d7 = 1: also the four neighbours must be empty
 ; -> d0 = an empty cell away from the head and the start, or -1
 RandomCell:
-	movem.l	d1-d6/a0,-(sp)
+	movem.l	d1-d6/a0-a1,-(sp)
 	lea	Map,a0
 	moveq	#0,d0
 	bsr	SegPos
@@ -1547,6 +1793,9 @@ RandomCell:
 	mulu	#40,d0
 	add.w	d1,d0
 	tst.b	(a0,d0.w)
+	bne.s	.no
+	lea	SporeMap,a1
+	tst.b	(a1,d0.w)
 	bne.s	.no
 	tst.b	HeartOn
 	beq.s	.nh
@@ -1590,67 +1839,24 @@ RandomCell:
 	bne.s	.no
 	tst.b	40(a0,d0.w)
 	bne.s	.no
-.yes:	movem.l	(sp)+,d1-d6/a0
+.yes:	movem.l	(sp)+,d1-d6/a0-a1
 	rts
 .no:	dbf	d6,.try
 	moveq	#-1,d0
-	movem.l	(sp)+,d1-d6/a0
+	movem.l	(sp)+,d1-d6/a0-a1
 	rts
 
-; the joystick: new presses go into a queue of two turns
-HandleJoy:
-	move.b	JoyHit,d0
-	clr.b	JoyHit
-	and.w	#15,d0
-	bne.s	.new
-	tst.w	QCount
-	bne.s	.x
-	move.b	JoyDir,d0
-	and.w	#15,d0
-	beq.s	.x
-.new:	moveq	#0,d1
-.b:	btst	d1,d0
-	beq.s	.nb
-	bsr	Enqueue
-	tst.w	d2
-	bne.s	.x
-.nb:	addq.w	#1,d1
-	cmp.w	#4,d1
-	blt.s	.b
-.x:	rts
-
-; Enqueue: d1 = direction -> d2 = 1 if taken
-Enqueue:
-	move.w	Dir,d3
-	move.w	QCount,d2
-	beq.s	.c
-	lea	Queue,a0
-	add.w	d2,d2
-	move.w	-2(a0,d2.w),d3
-.c:	moveq	#0,d2
-	cmp.w	d3,d1
-	beq.s	.x
-	eor.w	#2,d3
-	cmp.w	d3,d1			; no turning back into yourself
-	beq.s	.x
-	move.w	QCount,d3
-	cmp.w	#2,d3
-	bge.s	.x
-	lea	Queue,a0
-	add.w	d3,d3
-	move.w	d1,(a0,d3.w)
-	addq.w	#1,QCount
-	moveq	#1,d2
-.x:	rts
 
 ;---------------------------------------------------------------------
-; PlayLoop: -> d0 = 0 round clear, 1 died, 2 quit
+; PlayLoop: -> d0 = 0 round clear, 1 died (Retry set: gave up), 2 quit
 PlayLoop:
 .l:	bsr	WaitFrame
 	move.b	LastKey,d0
 	move.b	#$ff,LastKey
 	cmp.b	#$45,d0			; Esc
-	beq.s	.quit
+	beq	.quit
+	cmp.b	#$13,d0			; R: retry the round
+	beq.s	.retry
 	cmp.b	#$19,d0			; P
 	bne.s	.np
 	bsr	Pause
@@ -1659,21 +1865,28 @@ PlayLoop:
 	beq.s	.nd
 	cmp.b	#$36,d0			; dev: N = next round
 	beq.s	.clear
-.nd:	bsr	HandleJoy
-	bsr	BonusTick
-	bsr	HeartTick
-	bsr	SproutTick
-	subq.w	#1,StepTimer
-	bgt.s	.l
-	move.w	Speed,StepTimer
-	bsr	Step
+.nd:	tst.b	Fire			; fire held 1.2 s: retry
+	beq.s	.nf
+	addq.w	#1,FireHold
+	cmp.w	#60,FireHold
+	bge.s	.retry
+	bra.s	.f2
+.nf:	clr.w	FireHold
+.f2:	bsr	StepInput
 	tst.b	Dead
 	bne.s	.dead
 	tst.w	Remaining
-	bne.s	.l
-.clear:	moveq	#0,d0
-	rts
+	beq.s	.clear
+	bsr	BonusTick
+	bsr	SporeBlink
+	bsr	HeartTick
+	bra.s	.l
+.retry:	st	Retry
+	moveq	#SFX_FIZZLE,d0
+	bsr	PlaySfx
 .dead:	moveq	#1,d0
+	rts
+.clear:	moveq	#0,d0
 	rts
 .quit:	moveq	#2,d0
 	rts
@@ -1696,30 +1909,11 @@ Pause:	lea	TxPaused(pc),a0
 BonusTick:
 	subq.w	#1,BonusTimer
 	bgt.s	.x
-	move.w	#30,BonusTimer
+	move.w	BonusRate,BonusTimer
 	tst.w	Bonus
 	beq.s	.x
 	sub.w	#10,Bonus
 	bsr	DrawBonus
-.x:	rts
-
-; when the bonus has run out, a mushroom sprouts every 5 seconds
-SproutTick:
-	tst.w	Bonus
-	bne.s	.x
-	subq.w	#1,SproutTimer
-	bgt.s	.x
-	move.w	#250,SproutTimer
-	moveq	#1,d7
-	bsr	RandomCell
-	tst.w	d0
-	bmi.s	.x
-	lea	Map,a0
-	move.b	#C_MUSH,(a0,d0.w)
-	moveq	#T_MUSH,d2
-	bsr	SetCell
-	moveq	#SFX_SPROUT,d0
-	bsr	PlaySfx
 .x:	rts
 
 ; the heart drifts across the field (diagonally, bouncing)
@@ -1961,6 +2155,8 @@ TitlePage:	ds.b	1
 HeartOn:	ds.b	1
 Dead:		ds.b	1
 SpawnBall:	ds.b	1
+Retry:		ds.b	1
+Ate:		ds.b	1
 	even
 TitleTimer:	ds.w	1
 Seed:		ds.w	1
@@ -1979,16 +2175,17 @@ Lives:		ds.w	1
 Round:		ds.w	1
 LevelIdx:	ds.w	1
 LevelName:	ds.l	1
-Speed:		ds.w	1
-StepTimer:	ds.w	1
+BonusRate:	ds.w	1
+RepeatTimer:	ds.w	1
+FireHold:	ds.w	1
+SporeN:		ds.w	1
+SporeNext:	ds.w	1
+SporeList:	ds.w	16
 Bonus:		ds.w	1
 BonusTimer:	ds.w	1
 Mult:		ds.w	1
 Remaining:	ds.w	1
-SproutTimer:	ds.w	1
 Dir:		ds.w	1
-Queue:		ds.w	2
-QCount:		ds.w	1
 Grow:		ds.w	1
 HeadIdx:	ds.w	1
 Len:		ds.w	1
@@ -2001,6 +2198,10 @@ HeartTimer:	ds.w	1
 Ring:		ds.w	RINGMASK+1
 Map:		ds.b	40*32
 TileMap:	ds.w	40*32
+SporeMap:	ds.b	40*32
+Visit:		ds.b	40*32
+BfsQ:		ds.w	40*32
+CandList:	ds.w	40*32
 
 	section	chipvars,bss_c
 Screen:		ds.b	SCRSIZE

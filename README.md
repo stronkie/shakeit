@@ -14,10 +14,10 @@ mushrooms start to sprout.
 ## Files
 | File | What |
 |---|---|
-| `StronkiesCloverSnake_V0.1.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
+| `StronkiesCloverSnake_V0.2.adf` | the game disk (packed, boots; Install on it puts the game on a hard disk) |
 | `StronkiesCloverSnake_Demo.adf` | free demo: rounds 1-3 |
-| `StronkiesCloverSnake_V0.1_harddrive.zip` | drawer for a hard drive / CF card |
-| `StronkiesCloverSnake_V0.1_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
+| `StronkiesCloverSnake_V0.2_harddrive.zip` | drawer for a hard drive / CF card |
+| `StronkiesCloverSnake_V0.2_WHDLoad.zip` / `.lha` | WHDLoad version (own slave, no Kickstart image; F10 quits) |
 
 ## Controls
 Joystick port 2 or cursor keys - Fire/Space/Return start - P pause - M music on/off -
@@ -26,11 +26,19 @@ Developer mode: **Ctrl + Alt + D** on the title ("DEV" on screen): no lives lost
 **N** = next round, the hi-score is not kept.
 
 ## Rules
-- Clover 20 points, the snake grows 2, a ball appears. Ball 50 points.
+- **Step by step**: the snake only moves when the stick is pushed (one push = one step,
+  held = a step every 5 frames after 12). Straight back is ignored.
+- Clover 20 points, the snake grows 2, a ball appears on a free cell the snake can reach
+  (flood fill from the head). Ball 50 points, no growth.
+- **Spores** (per round a list of up to 15 cells, many in narrow places): every bite (clover
+  or ball) grows a mushroom on the next spore in the list (it blinks). If the snake, a crate
+  or the heart lies on it at that moment, nothing grows and the spore is gone.
+- **Crates**: walking into a crate pushes it one cell if the cell behind it is empty;
+  otherwise the snake just doesn't move (bump).
 - Heart 100 points + bonus multiplier (max x9). It drifts diagonally and bounces.
-- Bonus starts at 1000 and drops 10 every 0.6 s; what is left x multiplier is added
-  at the end of the round. At 0, a mushroom sprouts every 5 seconds.
-- Extra life every 10000. 12 rounds, then they loop faster (speed 8 -> 3 frames a step).
+- Bonus starts at 1000 and drops 10 every 40 frames (quicker after round 12).
+- Walls, mushrooms and the tail kill. Losing a life restarts the round as it was;
+  **R or holding fire 1.2 s** = retry (costs a life). Extra life every 10000.
 
 ## Building
 ```sh
@@ -45,6 +53,10 @@ VER=0.1 tools/build.sh        # gen.py (gfx, rounds, sound) + assemble + ADFs + 
 
 ## Changelog
 ### Not yet on itch
+- **V0.2** (27-11-2026) Plays like the MSX original: step-by-step movement, pushable
+  crates, mushrooms growing on spores each time you eat (block them with the tail),
+  retry key (R / hold fire), the round restarts after losing a life, balls only where
+  reachable. New rounds with crates and spores.
 - **V0.1** (27-11-2026) First version: 12 rounds, clovers + balls, poison mushrooms,
   drifting hearts with the bonus multiplier, sprouting mushrooms, title + how-to-play
   pages, music and effects, 3-round demo, hard disk installer, WHDLoad. Print kit
